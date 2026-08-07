@@ -31,7 +31,7 @@
     "typescript": "^5.7.2"
   },
   "build": {
-    "appId": "uk.co.nugsmen.blxxdlauncher",
+    "appId": "blxxdlauncher",
     "productName": "Blxxdlauncher",
     "files": [
       "dist/**/*",
