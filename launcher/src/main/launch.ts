@@ -575,6 +575,28 @@ export async function launchProfile(instanceId: string, emit: EventSink): Promis
       overrides: {
         // Isolated game directory: mods, config, saves, options.txt.
         gameDirectory: gameDir,
+
+        // The JVM's working directory, which is NOT implied by gameDirectory.
+        //
+        // MCLC spawns with `cwd: overrides.cwd || root`, so leaving this unset
+        // put every instance's process in the shared install root. Anything
+        // resolving a relative path then escaped the instance:
+        //
+        //   - Minecraft's log4j config writes to `logs/`, relative to the
+        //     working directory. Every instance's latest.log landed in
+        //     ~/.blxxdlauncher/logs and overwrote the previous one.
+        //   - Sodium reads `sodium-mixins.properties` from the working
+        //     directory during mixin plugin init, too early to ask Fabric for
+        //     the config directory. One instance's graphics tuning silently
+        //     applied to all of them.
+        //   - Crash reports land next to the logs, so the report for a crash
+        //     was not in the instance that crashed.
+        //
+        // Isolation is the entire premise of a per-instance game directory, so
+        // a second path that quietly points somewhere shared is worse than no
+        // isolation at all — it looks correct right up until two instances
+        // disagree about a setting.
+        cwd: gameDir,
         // `directory` and `natives` are deliberately NOT set. `directory` is
         // where the version jar/json live (root/versions/<id> by default, which
         // is what we want), and MCLC already scopes natives per version id —
