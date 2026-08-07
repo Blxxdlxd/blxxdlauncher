@@ -19,6 +19,7 @@ import { ensureLoaderInstalled } from './loader-install';
 import { ensureAssets } from './assets';
 import { getAuthorization } from './auth';
 import { resolveProfile, markPlayed } from './instances';
+import { MODERN_JAVA } from './profiles';
 import type { ClientProfile, LaunchEvent, McAuthorization } from '../shared/types';
 
 export type EventSink = (event: LaunchEvent) => void;
@@ -65,7 +66,7 @@ function throttleProgress(emit: EventSink): (task: string, current: number, tota
  * looks installed to `isLoaderInstalled`. Checking `java -version` up front
  * costs ~200 ms and turns a confusing broken install into one clear sentence.
  */
-function assertJavaVersion(profile: ClientProfile): void {
+function assertJavaVersion(profile: ClientProfile, emit: EventSink): void {
   // Taken from the version's own metadata (`javaVersion.majorVersion`),
   // resolved once when the instance was created.
   //
@@ -97,13 +98,32 @@ function assertJavaVersion(profile: ClientProfile): void {
   const first = Number(match[1]);
   const major = first === 1 ? Number(match[2] ?? 0) : first;
 
-  if (major !== required) {
+  // `required` is Mojang's javaVersion.majorVersion, which is a MINIMUM, not an
+  // exact requirement — and modded packs regularly need more than the minimum.
+  // A single mod whose mixin config declares `compatibilityLevel: JAVA_21` will
+  // refuse to initialise on Java 17 and take the whole game down with it, with
+  // an error that names the mixin config and never mentions the JVM.
+  //
+  // So above MODERN_JAVA a newer JVM is accepted. Below it, it is not: the
+  // 1.7.10-1.12 LaunchWrapper stack reaches into JDK internals that Java 9
+  // sealed, and "newer" there means "crashes differently".
+  const acceptable = required >= MODERN_JAVA ? major >= required : major === required;
+
+  if (!acceptable) {
+    const wanted = required >= MODERN_JAVA ? `Java ${required} or newer` : `Java ${required}`;
     throw new Error(
-      `${profile.name} needs Java ${required}, but the configured JVM is Java ${major}:\n` +
+      `${profile.name} needs ${wanted}, but the configured JVM is Java ${major}:\n` +
         `  ${profile.javaPath}\n` +
         `Fix it in ${path.join(DIRS.launcherState, 'runtimes.json')} — ` +
         `{"${required}": "<path to your JDK ${required}>"} — then relaunch.`,
     );
+  }
+
+  if (major !== required) {
+    emit({
+      kind: 'status',
+      message: `Java ${major} (this version asks for ${required} or newer).`,
+    });
   }
 }
 
@@ -480,7 +500,7 @@ export async function launchProfile(instanceId: string, emit: EventSink): Promis
     emit({ kind: 'status', message: `Preparing ${profile.name}…` });
 
     // Before any download: a wrong-major JVM poisons the install directory.
-    assertJavaVersion(profile);
+    assertJavaVersion(profile, emit);
     emit({ kind: 'status', message: `JVM OK: ${profile.javaPath}` });
 
     await ensureLoaderInstalled(profile, (message) => emit({ kind: 'status', message }));

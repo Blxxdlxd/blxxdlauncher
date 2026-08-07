@@ -77,16 +77,43 @@ function normaliseJavaPath(candidate: string, exe: string): string | null {
 }
 
 /**
+ * The Java major from which a newer JVM is an acceptable substitute.
+ *
+ * Below this line it is not. Minecraft 1.7.10 through 1.12 run on a
+ * LaunchWrapper stack that reflects into JDK internals Java 9 sealed off, so
+ * "just use a newer JDK" there is a guaranteed crash rather than a permitted
+ * upgrade. From 1.17 onwards (Java 17+) the platform is stable in the usual
+ * backward-compatible way and running on a later JDK is routine — modded packs
+ * frequently *require* it.
+ */
+export const MODERN_JAVA = 17;
+
+/**
  * Resolve a java executable for a given major version.
  *
  * Resolution order:
  *   1. `MCC_JAVA_21` / `MCC_JAVA_8` env override — highest priority, for CI and
  *      one-off experiments.
- *   2. `~/.blxxdlauncher/launcher/runtimes.json` — the durable answer, and the
- *      one that works when the app is launched from a shortcut.
- *   3. A conventional install location.
- *   4. Bare `java` on PATH (last resort; wrong for at least one profile on a
+ *   2. `~/.blxxdlauncher/launcher/runtimes.json`, exact major — the durable
+ *      answer, and the one that works when the app is launched from a shortcut.
+ *   3. `runtimes.json`, lowest configured major above the requirement, for
+ *      modern versions only. See below.
+ *   4. A conventional install location.
+ *   5. Bare `java` on PATH (last resort; wrong for at least one profile on a
  *      machine that has both JDKs).
+ *
+ * Step 3 exists because the required major comes from Mojang's
+ * `javaVersion.majorVersion`, which is a *minimum*, not an exact requirement.
+ * Somebody with `{"8": ..., "21": ...}` configured — a perfectly sensible pair
+ * covering the legacy and modern eras — would otherwise have no JVM at all for
+ * a 1.20.1 instance, which asks for 17. Falling through to the filesystem scan
+ * in that situation is worse than it looks: it silently prefers whatever JDK 17
+ * happens to be installed over the one the user explicitly configured, and a
+ * pack that needs 21 then dies deep inside mod init with an error naming a
+ * mixin config rather than a JVM.
+ *
+ * Explicit configuration outranks a filesystem guess. That is the whole point
+ * of runtimes.json.
  */
 export function resolveJava(major: number): string {
   const exe = process.platform === 'win32' ? 'javaw.exe' : 'java';
@@ -97,11 +124,29 @@ export function resolveJava(major: number): string {
     if (resolved) return resolved;
   }
 
-  const configured = readConfiguredRuntimes()[String(major)];
+  const runtimes = readConfiguredRuntimes();
+
+  const configured = runtimes[String(major)];
   if (configured) {
     const resolved = normaliseJavaPath(configured, exe);
     if (resolved) return resolved;
     console.warn(`[profiles] runtimes.json points at a missing JDK ${major}: ${configured}`);
+  }
+
+  if (major >= MODERN_JAVA) {
+    // Lowest first: closest to what the version actually asked for.
+    const newer = Object.keys(runtimes)
+      .map(Number)
+      .filter((m) => Number.isFinite(m) && m > major)
+      .sort((a, b) => a - b);
+
+    for (const candidate of newer) {
+      const resolved = normaliseJavaPath(runtimes[String(candidate)] ?? '', exe);
+      if (resolved) {
+        console.log(`[profiles] No JDK ${major} configured; using the configured JDK ${candidate}.`);
+        return resolved;
+      }
+    }
   }
 
   if (process.platform === 'win32') {
