@@ -1,0 +1,9 @@
+Client-core jars go here.
+
+The launcher looks in this directory for the jar named by a template in
+launcher/src/main/profiles.ts — <repo>/artifacts in development, and
+<resourcesPath>/artifacts in a packaged build.
+
+Nothing needs to be here. A template whose jar is missing launches as plain
+(modded) Minecraft and says so in the log; the instance card says so before
+anything is downloaded. That is a supported outcome, not a broken install.

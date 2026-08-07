@@ -1,0 +1,437 @@
+:root {
+  --bg: #11131a;
+  --panel: #181b25;
+  --border: #272b38;
+  --text: #e6e8ef;
+  --muted: #8b90a3;
+  --accent: #5b8cff;
+  --danger: #ff6b6b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.topbar h1 { font-size: 16px; margin: 0; letter-spacing: 0.06em; text-transform: uppercase; }
+.account { display: flex; align-items: center; gap: 10px; }
+.account span { color: var(--muted); }
+
+button {
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 7px 14px;
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+
+main {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 16px;
+  padding: 16px 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+
+/* ------------------------------------------------------------- instances */
+
+.instances { display: flex; flex-direction: column; min-height: 0; }
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.section-head h2 { margin: 0; }
+
+/* The list scrolls on its own so the console pane keeps its height however
+   many instances exist. */
+.instance-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 2px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.instance-card {
+  --accent: #5b8cff;
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px 12px 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "icon body" "actions actions";
+  gap: 4px 12px;
+  overflow: hidden;
+}
+
+/* Accent stripe: the only per-era colour, so the two runtimes are told apart
+   at a glance without reading a badge. */
+.instance-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+.instance-icon {
+  grid-area: icon;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.instance-body { grid-area: body; min-width: 0; }
+.instance-body h3 {
+  margin: 0 0 5px;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.badge {
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.badge.muted { background: transparent; border-color: var(--border); color: var(--muted); }
+.badge.warn { background: transparent; border-color: #6b5a2a; color: #ffd166; }
+.badge.error { background: transparent; border-color: #6b2f2f; color: var(--danger); }
+
+.instance-meta { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+.instance-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.instance-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 5px 11px;
+  font-size: 12px;
+}
+.instance-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.instance-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.instance-actions button.primary:hover:not(:disabled) { filter: brightness(1.1); }
+.instance-actions button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+.instance-empty {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 28px 14px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- dialogs */
+
+.dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0;
+  width: min(440px, calc(100vw - 40px));
+}
+.dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.dialog form { padding: 18px 20px 14px; margin: 0; }
+.dialog h3 { margin: 0 0 14px; font-size: 15px; }
+
+.dialog label,
+.dialog .field-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+
+.dialog input[type="text"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 10px;
+}
+.dialog input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+.dialog select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 10px;
+}
+.dialog select:focus { outline: none; border-color: var(--accent); }
+
+.version-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+.checkbox.inline { margin: 0 0 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.checkbox.inline input { accent-color: var(--accent); }
+
+/* The loader list can run to four entries; cap it so the dialog never grows
+   past the viewport on a short window. */
+.template-choices { max-height: 216px; overflow-y: auto; }
+
+.memory-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hint { margin: 6px 0 0; font-size: 11px; color: var(--muted); }
+.hint code { background: var(--bg); padding: 1px 4px; border-radius: 3px; }
+
+.template-choices { display: flex; flex-direction: column; gap: 8px; }
+.template-choice {
+  --accent: #5b8cff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-weight: 400;
+}
+.template-choice strong { font-size: 13px; }
+.template-choice span { font-size: 11px; color: var(--muted); }
+.template-choice.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+}
+
+.checkbox { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; color: var(--text); }
+.checkbox input { accent-color: var(--danger); }
+
+.dialog-error { margin: 12px 0 0; color: var(--danger); font-size: 12px; }
+
+/* ------------------------------------------------------------------- mods */
+
+.dialog.wide { width: min(680px, calc(100vw - 40px)); }
+.dialog.wide > .mods-head,
+.dialog.wide > div,
+.dialog.wide > p,
+.dialog.wide > menu { padding: 0 20px; }
+.dialog.wide > .mods-head { padding-top: 18px; }
+.dialog.wide > menu { padding-bottom: 14px; }
+
+.mods-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.mods-head h3 { margin: 0 0 10px; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tabs { display: flex; gap: 14px; }
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  padding: 2px 0 5px;
+  text-transform: uppercase;
+}
+.tab.selected { color: var(--text); border-bottom-color: var(--accent); }
+
+#mods-search {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+}
+#mods-search:focus { outline: none; border-color: var(--accent); }
+
+/* Fixed height rather than max-height: the dialog jumping between a two-row
+   and a twenty-row list on every keystroke is worse than a little empty space. */
+.mod-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mod-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.mod-row.disabled { opacity: 0.5; }
+
+.mod-icon { width: 34px; height: 34px; border-radius: 6px; flex: none; object-fit: cover; }
+
+.mod-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mod-body strong { font-size: 13px; }
+.mod-body span {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mod-meta { color: #6b7080 !important; }
+
+.mod-actions { display: flex; gap: 6px; flex: none; }
+.mod-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 5px 10px;
+}
+.mod-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.mod-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mod-actions button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+.mod-empty {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Reserves its line whether or not there is a message, so the dialog does not
+   resize every time an install reports progress. */
+.mods-status { margin: 10px 0 0; min-height: 15px; font-size: 12px; color: var(--muted); }
+.mods-status.err { color: var(--danger); }
+.mods-status.ok { color: #6ee7a8; }
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+}
+.dialog-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.dialog-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dialog-actions button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+.console { display: flex; flex-direction: column; min-height: 0; }
+.console-head { display: flex; align-items: center; justify-content: space-between; }
+
+/*
+ * The progress bar always occupies its slot and toggles `visibility`, never
+ * `display`. Using the `hidden` attribute removed it from layout, so the log
+ * pane below shifted by 12px every time the bar appeared or disappeared — once
+ * per downloaded file, which read as the whole panel vibrating.
+ */
+progress {
+  width: 100%;
+  height: 4px;
+  margin-bottom: 8px;
+  visibility: hidden;
+}
+progress.active { visibility: visible; }
+
+.log {
+  flex: 1;
+  margin: 0;
+  overflow: auto;
+  background: #0c0e14;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  font: 12px/1.55 Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.log .err { color: var(--danger); }
+.log .ok { color: #6ee7a8; }
+
+.cf-prompt { margin: 0 0 8px; font-size: 11px; color: var(--muted); }
+.cf-prompt strong { color: var(--text); font-weight: 600; }
+
+.linklike {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.cf-setup-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.cf-setup-row input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 9px;
+}
+.cf-setup-row input:focus { outline: none; border-color: var(--accent); }
+.cf-setup-row button { font-size: 12px; padding: 6px 12px; }
+.cf-setup-row button:not(.primary) {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}

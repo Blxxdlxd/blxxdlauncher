@@ -1,0 +1,60 @@
+{
+  "name": "blxxdlauncher",
+  "productName": "Blxxdlauncher",
+  "version": "0.1.0",
+  "description": "Minecraft launcher: isolated instances on any version and loader, with mod installation.",
+  "main": "dist/main/main.js",
+  "author": "Blxxdlauncher",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "clean": "rimraf dist",
+    "build:main": "tsc -p tsconfig.json",
+    "copy:renderer": "copyfiles -u 2 \"src/renderer/**/*.html\" \"src/renderer/**/*.css\" dist/renderer",
+    "build": "npm run build:main && npm run copy:renderer",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --dev",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "minecraft-launcher-core": "^3.18.2",
+    "msmc": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^22.10.0",
+    "copyfiles": "^2.4.1",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2"
+  },
+  "build": {
+    "appId": "uk.co.nugsmen.blxxdlauncher",
+    "productName": "Blxxdlauncher",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../artifacts",
+        "to": "artifacts",
+        "filter": [
+          "**/*.jar"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

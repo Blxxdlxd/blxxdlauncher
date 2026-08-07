@@ -1,0 +1,33 @@
+# --- Node / Electron ---------------------------------------------------------
+node_modules/
+launcher/dist/
+launcher/release/
+npm-debug.log*
+
+# --- IDE ---------------------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.settings/
+
+# --- Client core jars --------------------------------------------------------
+# Built elsewhere and dropped in here. The directory is tracked via .gitkeep so
+# a fresh clone has somewhere to put them; the jars themselves are not source.
+artifacts/*.jar
+
+# --- Secrets -----------------------------------------------------------------
+# Belt and braces. None of these are written inside the repo — the Microsoft
+# account blob and the CurseForge API key live in ~/.blxxdlauncher/launcher —
+# but a stray copy must never be committable. A leaked API key is not something
+# a later commit can undo.
+*.dat
+*.key
+*.pem
+.env
+.env.*
+account.json
+curseforge.key
+
+# Instance registry: user data, and it records absolute paths from whichever
+# machine wrote it.
+instances.json

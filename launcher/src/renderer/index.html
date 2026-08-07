@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Blxxdlauncher</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Blxxdlauncher</h1>
+      <div class="account">
+        <span id="account-name">Not signed in</span>
+        <button id="btn-login" type="button">Sign in with Microsoft</button>
+        <button id="btn-logout" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="instances">
+        <div class="section-head">
+          <h2>Instances</h2>
+          <button id="btn-new-instance" type="button" class="primary">New instance</button>
+        </div>
+        <ul id="instance-grid" class="instance-grid"></ul>
+      </section>
+
+      <section class="console">
+        <div class="console-head">
+          <h2>Runtime log</h2>
+          <button id="btn-open-root" type="button">Open game folder</button>
+        </div>
+        <!-- No `hidden` attribute: visibility is driven by the .active class so
+             the element never leaves layout. See styles.css. -->
+        <progress id="progress" max="100" value="0"></progress>
+        <pre id="log" class="log" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <!--
+      Native <dialog>: it brings the top layer, the backdrop, focus trapping and
+      Escape-to-close for free. A hand-rolled overlay would reimplement all four,
+      and get the focus trap wrong.
+    -->
+    <dialog id="instance-dialog" class="dialog">
+      <form method="dialog" id="instance-form">
+        <h3 id="dialog-title">New instance</h3>
+
+        <label for="field-name">Name</label>
+        <input id="field-name" name="name" type="text" maxlength="48" required />
+
+        <label for="field-icon">Icon</label>
+        <input id="field-icon" name="icon" type="text" maxlength="4" />
+
+        <div id="template-block">
+          <div class="version-row">
+            <div>
+              <label for="field-mc">Minecraft version</label>
+              <select id="field-mc"></select>
+            </div>
+            <label class="checkbox inline">
+              <input id="field-snapshots" type="checkbox" />
+              <span>Snapshots</span>
+            </label>
+          </div>
+
+          <span class="field-label">Loader</span>
+          <div id="loader-choices" class="template-choices"></div>
+
+          <div id="build-block">
+            <label for="field-build">Loader build</label>
+            <select id="field-build"></select>
+          </div>
+        </div>
+
+        <div class="memory-row">
+          <div>
+            <label for="field-mem-max">Max heap</label>
+            <input id="field-mem-max" name="memoryMax" type="text" maxlength="6" placeholder="8G" />
+          </div>
+          <div>
+            <label for="field-mem-min">Min heap</label>
+            <input id="field-mem-min" name="memoryMin" type="text" maxlength="6" placeholder="4G" />
+          </div>
+        </div>
+        <p class="hint">Digits followed by M or G, e.g. <code>8G</code> or <code>6144M</code>.</p>
+
+        <p id="dialog-error" class="dialog-error" hidden></p>
+
+        <menu class="dialog-actions">
+          <button type="button" id="dialog-cancel">Cancel</button>
+          <button type="submit" id="dialog-confirm" class="primary">Create</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="mods-dialog" class="dialog wide">
+      <div class="mods-head">
+        <h3 id="mods-title">Mods</h3>
+        <div class="tabs" id="mods-tabs">
+          <button type="button" class="tab selected" data-tab="installed">Installed</button>
+          <button type="button" class="tab" data-tab="all">All</button>
+          <button type="button" class="tab" data-tab="modrinth">Modrinth</button>
+          <button type="button" class="tab" data-tab="curseforge">CurseForge</button>
+        </div>
+      </div>
+
+      <div id="mods-browse" hidden>
+        <input id="mods-search" type="search" placeholder="Search mods…" autocomplete="off" />
+
+        <p id="cf-prompt" class="cf-prompt" hidden>
+          Searching <strong>Modrinth</strong> only.
+          <button type="button" id="cf-setup" class="linklike">Add a CurseForge key</button>
+          to search both.
+        </p>
+
+        <div id="cf-setup-row" class="cf-setup-row" hidden>
+          <input id="cf-key" type="password" placeholder="CurseForge API key" autocomplete="off" />
+          <button type="button" id="cf-save" class="primary">Save</button>
+          <button type="button" id="cf-clear">Remove</button>
+        </div>
+
+        <ul id="mods-results" class="mod-list"></ul>
+      </div>
+
+      <div id="mods-installed">
+        <ul id="mods-installed-list" class="mod-list"></ul>
+      </div>
+
+      <p id="mods-status" class="mods-status"></p>
+
+      <menu class="dialog-actions">
+        <button type="button" id="mods-folder">Open folder</button>
+        <button type="button" id="mods-close" class="primary">Done</button>
+      </menu>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="dialog">
+      <form method="dialog">
+        <h3 id="confirm-title">Delete instance</h3>
+        <p id="confirm-body"></p>
+        <label class="checkbox">
+          <input id="confirm-delete-files" type="checkbox" />
+          <span>Also delete its worlds, mods and config</span>
+        </label>
+        <menu class="dialog-actions">
+          <button type="button" id="confirm-cancel">Cancel</button>
+          <button type="button" id="confirm-ok" class="danger">Delete</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <!-- External script only: the CSP forbids inline script. -->
+    <script src="renderer.js"></script>
+  </body>
+</html>
