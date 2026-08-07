@@ -136,11 +136,13 @@ cannot drift apart silently.
 ## `artifacts/`
 
 A template may name a client-core jar. If the jar is present it is staged into
-the instance's `mods/` and loaded by the loader like any other mod; if it is
-absent, the instance launches as plain (modded) Minecraft and the log says so.
+the instance's `mods/` and loaded like any other mod. If it is absent — which
+is the default state of a fresh clone — the instance launches anyway, and the
+runtime log names the path it looked for.
 
-That is a supported outcome. This repo contains the launcher only — the client
-cores are built separately and are not required to use it.
+This repo contains the launcher only. The client cores are built from a
+separate source tree and are not required to use it: every instance is a
+complete, working Minecraft install without one.
 
 ---
 

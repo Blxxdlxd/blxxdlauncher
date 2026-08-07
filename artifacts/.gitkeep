@@ -4,6 +4,15 @@ The launcher looks in this directory for the jar named by a template in
 launcher/src/main/profiles.ts — <repo>/artifacts in development, and
 <resourcesPath>/artifacts in a packaged build.
 
-Nothing needs to be here. A template whose jar is missing launches as plain
-(modded) Minecraft and says so in the log; the instance card says so before
-anything is downloaded. That is a supported outcome, not a broken install.
+Nothing needs to be here.
+
+Two different "no core" cases, and they are reported differently on purpose:
+
+  - No core exists for that version and loader at all. The instance card says
+    so up front, before anything is downloaded.
+  - A core is named for that version and loader, but the jar is not on disk.
+    Only discoverable at launch, so it is reported then: the instance starts
+    without it and the runtime log names the path it looked for.
+
+Neither is a broken install. The instance is a complete, working Minecraft
+setup either way.

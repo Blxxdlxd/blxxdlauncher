@@ -205,11 +205,27 @@ function stageCoreJar(profile: ClientProfile, gameDir: string, emit: EventSink):
     return;
   }
 
+  // A named-but-absent core jar. This used to abort the launch, which was the
+  // wrong call in both directions.
+  //
+  // It is not fatal: the instance is a complete, working Minecraft install, and
+  // refusing to start it helps nobody. And it is not an odd case — the core jar
+  // is built from a separate source tree that a given checkout may simply not
+  // have, in which case the old message ("build it first: gradlew ...") named a
+  // command the reader has no way to run.
+  //
+  // So: launch, and say plainly what is missing and what the consequence is.
+  // This goes to the runtime log, which is on screen during the launch, and
+  // names the exact path — enough to spot a jar that failed to rebuild, rather
+  // than wondering mid-session why none of the client's features are there.
   if (!fs.existsSync(profile.clientCoreJar)) {
-    throw new Error(
-      `Client core jar not found: ${profile.clientCoreJar}\n` +
-        `Build it first: gradlew build installToLauncher`,
-    );
+    emit({
+      kind: 'status',
+      message:
+        `Client core jar not found — launching without it, so no client features this session.\n` +
+        `  Expected: ${profile.clientCoreJar}`,
+    });
+    return;
   }
 
   const modsDir = ensureDir(instanceModsDir(profile.id));
