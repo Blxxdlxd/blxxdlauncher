@@ -21,10 +21,12 @@ type InstanceSummary = import('../shared/types').InstanceSummary;
 type InstanceTemplate = import('../shared/types').InstanceTemplate;
 type InstanceDraft = import('../shared/types').InstanceDraft;
 type McVersion = import('../shared/types').McVersion;
+type JavaInstallation = import('../shared/types').JavaInstallation;
 type LoaderKind = import('../shared/types').LoaderKind;
 type LoaderBuild = import('../shared/types').LoaderBuild;
 type ModSearchResult = import('../shared/types').ModSearchResult;
 type InstalledMod = import('../shared/types').InstalledMod;
+type ModHealth = import('../shared/types').ModHealth;
 type ModSource = import('../shared/types').ModSource;
 type LauncherBridge = import('../shared/types').LauncherBridge;
 type LaunchEvent = import('../shared/types').LaunchEvent;
@@ -64,6 +66,8 @@ const fieldName = el<HTMLInputElement>('field-name');
 const fieldIcon = el<HTMLInputElement>('field-icon');
 const fieldMemMax = el<HTMLInputElement>('field-mem-max');
 const fieldMemMin = el<HTMLInputElement>('field-mem-min');
+const fieldJava = el<HTMLSelectElement>('field-java');
+const javaHint = el<HTMLParagraphElement>('java-hint');
 
 const confirmDialog = el<HTMLDialogElement>('confirm-dialog');
 const confirmBody = el<HTMLParagraphElement>('confirm-body');
@@ -491,6 +495,8 @@ async function openCreateDialog(): Promise<void> {
   fieldIcon.value = '⬦';
   fieldMemMax.value = '8G';
   fieldMemMin.value = '4G';
+  currentRequiredMajor = null;
+  void renderJavaChoices(null, null);
   dialogError.hidden = true;
 
   dialog.showModal();
@@ -522,11 +528,90 @@ function openEditDialog(summary: InstanceSummary): void {
   fieldIcon.value = summary.instance.icon;
   fieldMemMax.value = summary.instance.memoryMax;
   fieldMemMin.value = summary.instance.memoryMin;
+  currentRequiredMajor = summary.instance.runtime.javaMajor;
+  void renderJavaChoices(summary.instance.javaPathOverride, currentRequiredMajor);
   dialogError.hidden = true;
 
   dialog.showModal();
   fieldName.focus();
 }
+
+/**
+ * Detected JVMs, cached for the session.
+ *
+ * Building this list spawns `java -version` once per candidate, so it is fetched
+ * on first need rather than at startup — and kept, because installing a JDK
+ * mid-session is rare enough not to justify paying that cost on every open.
+ */
+let javaInstalls: JavaInstallation[] = [];
+
+async function renderJavaChoices(selected: string | null, requiredMajor: number | null): Promise<void> {
+  if (javaInstalls.length === 0) {
+    try {
+      javaInstalls = await window.launcher.listJavaInstallations();
+    } catch (err) {
+      // Not fatal: automatic resolution still works, the user just cannot
+      // override it this session.
+      append(`Could not list Java installations: ${(err as Error).message}`, 'err');
+    }
+  }
+
+  fieldJava.replaceChildren();
+
+  const auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = requiredMajor === null ? 'Automatic' : `Automatic (Java ${requiredMajor} or newer)`;
+  fieldJava.append(auto);
+
+  for (const install of javaInstalls) {
+    const option = document.createElement('option');
+    option.value = install.path;
+    const label = install.source === 'configured' ? 'configured' : 'detected';
+    option.textContent = `Java ${install.major} — ${install.version} (${label})`;
+    option.title = install.path;
+    fieldJava.append(option);
+  }
+
+  // A previously chosen JVM that has since been uninstalled must still appear,
+  // or opening the dialog would silently reset the instance to Automatic and
+  // the user would only find out when the game launched on the wrong runtime.
+  if (selected && !javaInstalls.some((i) => i.path === selected)) {
+    const missing = document.createElement('option');
+    missing.value = selected;
+    missing.textContent = `${selected} (not found)`;
+    fieldJava.append(missing);
+  }
+
+  fieldJava.value = selected ?? '';
+  updateJavaHint(requiredMajor);
+}
+
+function updateJavaHint(requiredMajor: number | null): void {
+  const chosen = javaInstalls.find((i) => i.path === fieldJava.value);
+  if (fieldJava.value.length === 0) {
+    javaHint.textContent =
+      "Automatic uses the version's own requirement. Pick a newer one if a mod needs it.";
+    javaHint.className = 'hint';
+    return;
+  }
+  if (!chosen) {
+    javaHint.textContent = 'That JVM was not found on this machine — the instance will fall back to automatic.';
+    javaHint.className = 'hint warn';
+    return;
+  }
+  if (requiredMajor !== null && chosen.major < requiredMajor) {
+    javaHint.textContent = `Java ${chosen.major} is older than the ${requiredMajor} this version needs. Launch will refuse it.`;
+    javaHint.className = 'hint warn';
+    return;
+  }
+  javaHint.textContent = chosen.path;
+  javaHint.className = 'hint';
+}
+
+fieldJava.addEventListener('change', () => updateJavaHint(currentRequiredMajor));
+
+/** The Java major the instance in the dialog needs, for the hint above. */
+let currentRequiredMajor: number | null = null;
 
 const MEMORY_PATTERN = /^\d+[MmGg]$/;
 
@@ -560,6 +645,7 @@ dialogForm.addEventListener('submit', (event) => {
   const icon = fieldIcon.value.trim();
   const memoryMax = fieldMemMax.value.trim().toUpperCase();
   const memoryMin = fieldMemMin.value.trim().toUpperCase();
+  const javaPathOverride = fieldJava.value.length > 0 ? fieldJava.value : null;
   const target = editing;
 
   dialog.close();
@@ -576,6 +662,7 @@ dialogForm.addEventListener('submit', (event) => {
           memoryMax,
           memoryMin,
           icon,
+          javaPathOverride,
         });
         await refreshInstances();
         // Straight into the mods panel: adding mods is nearly always the next
@@ -593,7 +680,13 @@ dialogForm.addEventListener('submit', (event) => {
   }
 
   void runAction(() =>
-    window.launcher.updateInstance(target.instance.id, { name, icon, memoryMax, memoryMin }),
+    window.launcher.updateInstance(target.instance.id, {
+      name,
+      icon,
+      memoryMax,
+      memoryMin,
+      javaPathOverride,
+    }),
   );
 });
 
@@ -615,6 +708,7 @@ const modsInstalledPane = el<HTMLDivElement>('mods-installed');
 const modsSearchBox = el<HTMLInputElement>('mods-search');
 const modsResults = el<HTMLUListElement>('mods-results');
 const modsInstalledList = el<HTMLUListElement>('mods-installed-list');
+const modsHealth = el<HTMLDivElement>('mods-health');
 const modsStatus = el<HTMLParagraphElement>('mods-status');
 
 /** Which instance the panel is showing, or null when closed. */
@@ -678,6 +772,53 @@ modsTabs.addEventListener('click', (event) => {
   if (tab?.dataset['tab']) selectModTab(tab.dataset['tab'] as ModTab);
 });
 
+/**
+ * Warn about a mods folder that disagrees with itself.
+ *
+ * Hidden entirely when there is nothing wrong: a banner that is always present
+ * stops being read, and this one is worth reading.
+ *
+ * Failures are swallowed rather than surfaced. This is a diagnostic, and a
+ * diagnostic that throws its own error into the mods dialog would be worse than
+ * one that quietly does nothing.
+ */
+async function renderModHealth(instanceId: string): Promise<void> {
+  modsHealth.hidden = true;
+  modsHealth.replaceChildren();
+
+  let health: ModHealth;
+  try {
+    health = await window.launcher.checkMods(instanceId);
+  } catch {
+    return;
+  }
+
+  if (health.missingFiles.length === 0 && health.unsatisfied.length === 0) return;
+
+  const heading = document.createElement('h4');
+  heading.textContent = 'This instance may not launch cleanly';
+  modsHealth.appendChild(heading);
+
+  const list = document.createElement('ul');
+
+  for (const title of health.missingFiles) {
+    const li = document.createElement('li');
+    li.textContent = `${title} is recorded as installed but its file is gone.`;
+    list.appendChild(li);
+  }
+
+  for (const { modId, requiredBy } of health.unsatisfied) {
+    const li = document.createElement('li');
+    const code = document.createElement('code');
+    code.textContent = modId;
+    li.append(code, ` is required by ${requiredBy} but nothing here provides it.`);
+    list.appendChild(li);
+  }
+
+  modsHealth.appendChild(list);
+  modsHealth.hidden = false;
+}
+
 async function refreshInstalledMods(): Promise<void> {
   if (!modsInstance) return;
   const id = modsInstance.instance.id;
@@ -691,6 +832,8 @@ async function refreshInstalledMods(): Promise<void> {
     setModsStatus((err as Error).message, 'err');
     return;
   }
+
+  void renderModHealth(id);
 
   if (mods.length === 0) {
     const empty = document.createElement('li');

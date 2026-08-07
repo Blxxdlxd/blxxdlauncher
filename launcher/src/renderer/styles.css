@@ -226,6 +226,12 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .memory-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hint { margin: 6px 0 0; font-size: 11px; color: var(--muted); }
 .hint code { background: var(--bg); padding: 1px 4px; border-radius: 3px; }
+/* A chosen JVM that is missing, or older than the version needs. Amber rather
+   than red: the instance still opens and still saves — this is a warning about
+   what will happen at launch, not a validation failure blocking the dialog. */
+.hint.warn { color: #ffb454; }
+/* Long absolute paths are the normal content of the Java hint. */
+#java-hint { overflow-wrap: anywhere; }
 
 .template-choices { display: flex; flex-direction: column; gap: 8px; }
 .template-choice {
@@ -435,3 +441,21 @@ progress.active { visibility: visible; }
   border: 1px solid var(--border);
   color: var(--muted);
 }
+
+/* Mod folder health: shown only when something is actually wrong, so its mere
+   presence is the signal. Amber, not red — the instance may still launch, and
+   the check cannot see undeclared dependencies, so this is advice not a verdict. */
+.mods-health {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #4a3a1c;
+  border-left: 3px solid #ffb454;
+  border-radius: 6px;
+  background: #241d10;
+  font-size: 12px;
+  color: var(--text);
+}
+.mods-health h4 { margin: 0 0 6px; font-size: 12px; color: #ffb454; font-weight: 600; }
+.mods-health ul { margin: 0; padding-left: 16px; }
+.mods-health li { margin: 2px 0; color: var(--muted); }
+.mods-health code { color: var(--text); }

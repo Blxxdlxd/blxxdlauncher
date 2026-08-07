@@ -17,7 +17,7 @@ import { app, BrowserWindow, ipcMain, shell, session } from 'electron';
 
 import { ensureLayout, DIRS } from './paths';
 import { login, restoreSession, clearSession, getAccount, getCachedAccount } from './auth';
-import { listTemplates } from './profiles';
+import { detectJavaInstallations, listTemplates } from './profiles';
 import { listAvailableLoaders, listLoaderBuilds, listMinecraftVersions } from './versions';
 import {
   createInstance,
@@ -31,6 +31,7 @@ import {
 import { isConfigured as curseforgeConfigured, setApiKey as setCurseForgeKey } from './curseforge';
 import {
   installMod,
+  checkInstanceMods,
   listInstalledMods,
   listModVersions,
   removeMod,
@@ -41,15 +42,17 @@ import { launchProfile } from './launch';
 import { IPC } from '../shared/types';
 import type {
   AccountSummary,
+  InstalledMod,
   InstanceDraft,
   InstancePatch,
-  InstalledMod,
   InstanceSummary,
   InstanceTemplate,
+  JavaInstallation,
   LaunchEvent,
   LoaderBuild,
   LoaderKind,
   McVersion,
+  ModHealth,
 } from '../shared/types';
 
 /**
@@ -278,6 +281,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.versionsMinecraft, async (): Promise<McVersion[]> => listMinecraftVersions());
 
+  // Probing every candidate costs a process spawn each, so this is requested
+  // when the dialog opens rather than kept warm — a JDK can be installed or
+  // removed between openings, and a cached list would quietly be wrong.
+  ipcMain.handle(IPC.javaList, async (): Promise<JavaInstallation[]> => detectJavaInstallations());
+
   ipcMain.handle(IPC.versionsLoaders, async (_event, mc: unknown): Promise<LoaderKind[]> => {
     return listAvailableLoaders(asId(mc, 'versions:loaders'));
   });
@@ -344,6 +352,10 @@ function registerIpcHandlers(): void {
         (message: string) => mainWindow?.webContents.send(IPC.modsEvent, message),
       );
     },
+  );
+
+  ipcMain.handle(IPC.modsCheck, async (_event, id: unknown): Promise<ModHealth> =>
+    checkInstanceMods(String(id)),
   );
 
   ipcMain.handle(IPC.modsInstalled, async (_event, id: unknown): Promise<InstalledMod[]> => {

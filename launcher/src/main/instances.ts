@@ -86,6 +86,13 @@ function readDocument(): Instance[] {
  * to a format change.
  */
 function migrate(candidate: Instance & { templateId?: string }): Instance {
+  // Added after instances shipped, so anything written earlier is missing it.
+  // Normalised here so no reader downstream has to treat undefined as a third
+  // state distinct from "automatic".
+  if (candidate?.javaPathOverride === undefined) {
+    candidate.javaPathOverride = null;
+  }
+
   if (candidate?.runtime !== undefined || typeof candidate?.templateId !== 'string') {
     return candidate;
   }
@@ -153,6 +160,7 @@ function seed(): Instance[] {
     memoryMin: DEFAULT_MEMORY_MIN,
     extraJvmArgs: [],
     icon: template.javaMajor === 8 ? '🕹️' : '⛏️',
+    javaPathOverride: null,
     createdAt: now,
     lastPlayed: null,
   }));
@@ -332,6 +340,7 @@ export async function createInstance(draft: InstanceDraft): Promise<InstanceSumm
     memoryMin: normaliseMemory(draft.memoryMin, DEFAULT_MEMORY_MIN),
     extraJvmArgs: [],
     icon: draft.icon.trim().slice(0, 4) || '⬦',
+    javaPathOverride: draft.javaPathOverride?.trim() || null,
     createdAt: Date.now(),
     lastPlayed: null,
   };
@@ -359,6 +368,10 @@ export function updateInstance(id: string, patch: InstancePatch): InstanceSummar
   }
   if (patch.extraJvmArgs !== undefined) {
     instance.extraJvmArgs = patch.extraJvmArgs.filter((arg) => arg.trim().length > 0);
+  }
+  if (patch.javaPathOverride !== undefined) {
+    // Empty string and null both mean "back to automatic".
+    instance.javaPathOverride = patch.javaPathOverride?.trim() || null;
   }
 
   persist();

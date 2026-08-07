@@ -142,6 +142,14 @@ export interface ModVersion {
   readonly datePublished: string;
 }
 
+/** Problems found by cross-checking an instance's mods folder. */
+export interface ModHealth {
+  /** Manifest entries whose jar is no longer on disk. */
+  readonly missingFiles: string[];
+  /** Declared dependencies nothing in the folder provides. */
+  readonly unsatisfied: ReadonlyArray<{ readonly modId: string; readonly requiredBy: string }>;
+}
+
 /** A jar present in an instance's mods folder. */
 export interface InstalledMod {
   readonly fileName: string;
@@ -210,8 +218,31 @@ export interface Instance {
   extraJvmArgs: string[];
   /** Single emoji or letter drawn on the card. */
   icon: string;
+  /**
+   * A specific JVM for this instance, or null to resolve one automatically.
+   *
+   * Exists because `runtime.javaMajor` is Mojang's *minimum*, and a modded
+   * instance often needs more than the minimum: one mod whose mixin config
+   * declares JAVA_21 will refuse to initialise on 17 and take the game down
+   * with an error that names the mod, not the JVM. Automatic resolution cannot
+   * know that, because nothing in the version metadata says it — only the
+   * person who assembled the mod list does.
+   */
+  javaPathOverride: string | null;
   readonly createdAt: number;
   lastPlayed: number | null;
+}
+
+/** A JVM found on this machine, offered as a choice for an instance. */
+export interface JavaInstallation {
+  /** Absolute path to the launcher executable (javaw.exe / java). */
+  readonly path: string;
+  /** Parsed major version: 8, 17, 21… */
+  readonly major: number;
+  /** Full version string as the JVM reports it, e.g. "21.0.11". */
+  readonly version: string;
+  /** Where it was found, so the list can explain itself. */
+  readonly source: 'configured' | 'detected' | 'custom';
 }
 
 /** An instance plus everything the UI needs to draw and judge it. */
@@ -248,6 +279,8 @@ export interface InstanceDraft {
   readonly memoryMax: string;
   readonly memoryMin: string;
   readonly icon: string;
+  /** Null (or absent) means resolve automatically. */
+  readonly javaPathOverride?: string | null;
 }
 
 /** Fields an existing instance allows editing. */
@@ -257,6 +290,7 @@ export interface InstancePatch {
   readonly memoryMin?: string;
   readonly icon?: string;
   readonly extraJvmArgs?: string[];
+  readonly javaPathOverride?: string | null;
 }
 
 /**
@@ -309,6 +343,8 @@ export const IPC = {
   profilesList: 'profiles:list',
   templatesList: 'templates:list',
   versionsMinecraft: 'versions:minecraft',
+  javaList: 'java:list',
+  modsCheck: 'mods:check',
   versionsLoaders: 'versions:loaders',
   versionsBuilds: 'versions:builds',
   instancesList: 'instances:list',
@@ -346,6 +382,12 @@ export interface LauncherBridge {
   listTemplates(): Promise<InstanceTemplate[]>;
   /** Every Minecraft version Mojang lists, newest first. */
   listMinecraftVersions(): Promise<McVersion[]>;
+
+  /** Every JVM found on this machine, for the per-instance Java picker. */
+  listJavaInstallations(): Promise<JavaInstallation[]>;
+
+  /** Cross-check an instance's mods folder for missing files and dependencies. */
+  checkMods(instanceId: string): Promise<ModHealth>;
   /** Which loader families have a build for this version. */
   listLoaders(minecraftVersion: string): Promise<LoaderKind[]>;
   /** Builds of one loader family for this version, newest first. */

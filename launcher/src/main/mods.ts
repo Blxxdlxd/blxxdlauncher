@@ -20,6 +20,8 @@ import { createHash } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 
+import AdmZip from 'adm-zip';
+
 import { ensureDir, instanceModsDir } from './paths';
 import { getInstanceSummary } from './instances';
 import * as curseforge from './curseforge';
@@ -510,11 +512,59 @@ async function download(
 // ------------------------------------------------------------------ listing
 
 /**
+ * The mod's own display name, read out of the jar.
+ *
+ * Preferred over the manifest's title because the manifest records the name of
+ * the *release*, not the project, and the two are frequently unrelated:
+ * GeckoLib names its Modrinth versions "Fabric 1.20.1", AzureLib names them
+ * after the file. Both are useless in a list of installed mods — one of them
+ * reads as though Fabric itself were the mod.
+ *
+ * The jar is authoritative and needs no network. It also gives real names to
+ * jars we did not install, which the manifest cannot describe at all.
+ *
+ * All three era-appropriate metadata formats, because an instance may be any
+ * loader: Fabric's fabric.mod.json, NeoForge/Forge's mods.toml, and the
+ * mcmod.info that 1.7.10 uses.
+ */
+function readModName(jarPath: string): string | null {
+  try {
+    const zip = new AdmZip(jarPath);
+
+    const fabric = zip.getEntry('fabric.mod.json');
+    if (fabric) {
+      const parsed = JSON.parse(zip.readAsText(fabric)) as { name?: string; id?: string };
+      return parsed.name ?? parsed.id ?? null;
+    }
+
+    for (const name of ['META-INF/neoforge.mods.toml', 'META-INF/mods.toml']) {
+      const entry = zip.getEntry(name);
+      if (!entry) continue;
+      // A one-line regex rather than a TOML parser: this is the only field we
+      // want, and pulling in a parser to read it would be the larger risk.
+      const match = /^\s*displayName\s*=\s*["'](.+?)["']/m.exec(zip.readAsText(entry));
+      if (match?.[1]) return match[1];
+    }
+
+    const legacy = zip.getEntry('mcmod.info');
+    if (legacy) {
+      const parsed = JSON.parse(zip.readAsText(legacy)) as Array<{ name?: string }>;
+      if (Array.isArray(parsed) && parsed[0]?.name) return parsed[0].name;
+    }
+  } catch {
+    // Unreadable, not a zip, or metadata in a shape we do not know. The caller
+    // falls back to the manifest title and then the file name, both of which
+    // are fine — this is a display nicety, not something to fail a listing for.
+  }
+  return null;
+}
+
+/**
  * Everything in the instance's mods folder.
  *
  * Scans the directory rather than trusting the manifest, so a jar dropped in by
- * hand is listed too — just without a title or a project to update from. The
- * manifest only supplies metadata for what we installed.
+ * hand is listed too — just without a project to update from. The manifest only
+ * supplies provenance for what we installed.
  */
 export function listInstalledMods(instanceId: string): InstalledMod[] {
   const dir = instanceModsDir(instanceId);
@@ -536,14 +586,16 @@ export function listInstalledMods(instanceId: string): InstalledMod[] {
 
     const baseName = disabled ? entry.name.slice(0, -'.disabled'.length) : entry.name;
     const known = byFile.get(baseName);
+    const fullPath = path.join(dir, entry.name);
 
     result.push({
       fileName: entry.name,
-      title: known?.title ?? baseName.replace(/\.jar$/, ''),
+      // Jar first, manifest second, file name last.
+      title: readModName(fullPath) ?? known?.title ?? baseName.replace(/\.jar$/, ''),
       projectId: known?.projectId ?? null,
       enabled,
       dependency: known?.dependency ?? false,
-      sizeBytes: fs.statSync(path.join(dir, entry.name)).size,
+      sizeBytes: fs.statSync(fullPath).size,
       /** True when we did not install it — the client core included. */
       external: known === undefined,
       // Entries written before CurseForge support carry no source; they can
@@ -553,6 +605,144 @@ export function listInstalledMods(instanceId: string): InstalledMod[] {
   }
 
   return result.sort((a, b) => a.title.localeCompare(b.title));
+}
+
+// -------------------------------------------------------------- health check
+
+/**
+ * Ids every Fabric mod may depend on that no jar in mods/ provides.
+ *
+ * The loader and the game satisfy these itself, so treating them as missing
+ * would flag every instance as broken.
+ */
+const AMBIENT_MOD_IDS = new Set([
+  'java',
+  'minecraft',
+  'fabricloader',
+  'fabric-loader',
+  'neoforge',
+  'forge',
+]);
+
+interface JarContents {
+  /** Every mod id this jar makes available, including bundled and aliased ones. */
+  readonly provides: Set<string>;
+  /** Requirement -> the mod that declared it. */
+  readonly requires: Map<string, string>;
+}
+
+/**
+ * Walk a mod jar and everything nested inside it.
+ *
+ * Recursion is not optional here. Fabric mods bundle their dependencies inside
+ * `META-INF/jars/`, sometimes three levels deep: Origins contains apoli, which
+ * contains cardinal-components, which contains more. Fabric API alone supplies
+ * 57 ids that way. Reading only the outer jar would report almost every
+ * dependency in a normal instance as missing, and a check that cries wolf is
+ * worse than no check — it teaches you to ignore it.
+ *
+ * `provides` is honoured for the same reason: Fabric API declares the alias
+ * `fabric`, which is what older mods like Origins actually depend on.
+ */
+function readJarContents(data: string | Buffer, into: JarContents, owner: string | null): void {
+  let zip: AdmZip;
+  try {
+    zip = new AdmZip(data);
+  } catch {
+    return; // Not a zip, or truncated. Nothing to learn from it.
+  }
+
+  let selfName = owner;
+
+  const entry = zip.getEntry('fabric.mod.json');
+  if (entry) {
+    try {
+      const meta = JSON.parse(zip.readAsText(entry)) as {
+        id?: string;
+        name?: string;
+        provides?: string[];
+        depends?: Record<string, unknown>;
+      };
+
+      if (meta.id) into.provides.add(meta.id);
+      for (const alias of meta.provides ?? []) into.provides.add(alias);
+
+      selfName = meta.name ?? meta.id ?? owner;
+
+      for (const required of Object.keys(meta.depends ?? {})) {
+        if (AMBIENT_MOD_IDS.has(required)) continue;
+        // First declarer wins: naming one mod that wants it is enough to act on,
+        // and listing all of them makes the message longer without helping.
+        if (!into.requires.has(required)) {
+          into.requires.set(required, selfName ?? required);
+        }
+      }
+    } catch {
+      /* Malformed metadata; the jar still counts as present. */
+    }
+  }
+
+  for (const nested of zip.getEntries()) {
+    if (!nested.entryName.startsWith('META-INF/jars/') || !nested.entryName.endsWith('.jar')) {
+      continue;
+    }
+    readJarContents(nested.getData(), into, selfName);
+  }
+}
+
+/** Problems worth telling the user about before they launch. */
+export interface ModHealth {
+  /** Manifest entries whose jar is no longer on disk. */
+  readonly missingFiles: string[];
+  /** Declared dependencies nothing in the folder provides. */
+  readonly unsatisfied: Array<{ modId: string; requiredBy: string }>;
+}
+
+/**
+ * Cross-check an instance's mods folder against itself.
+ *
+ * Two independent failure modes, both of which have actually happened here:
+ *
+ *   - The manifest lists a mod whose jar is gone. The launcher then believes
+ *     something is installed that is not, and the mods list disagrees with the
+ *     game.
+ *   - A mod declares a dependency nothing supplies. Fabric enforces its own
+ *     declared dependencies at load, so this mostly catches jars added by hand
+ *     — but seeing it in the launcher beats reading a NoClassDefFoundError
+ *     three screens into a crash log.
+ *
+ * Deliberately not a promise of a working instance. A mod that needs a library
+ * it never declared — as originfurs needs GeckoLib without saying so — cannot
+ * be detected from metadata by anything, and this will call that instance
+ * healthy. Only jars that are enabled are considered; a `.jar.disabled` is not
+ * loaded by the game and should not raise anything here.
+ */
+export function checkInstanceMods(instanceId: string): ModHealth {
+  const dir = instanceModsDir(instanceId);
+  const missingFiles: string[] = [];
+  const unsatisfied: Array<{ modId: string; requiredBy: string }> = [];
+
+  if (!fs.existsSync(dir)) return { missingFiles, unsatisfied };
+
+  for (const recorded of readManifest(instanceId).mods) {
+    const present =
+      fs.existsSync(path.join(dir, recorded.fileName)) ||
+      fs.existsSync(path.join(dir, `${recorded.fileName}.disabled`));
+    if (!present) missingFiles.push(recorded.title || recorded.fileName);
+  }
+
+  const contents: JarContents = { provides: new Set(), requires: new Map() };
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.jar')) continue;
+    readJarContents(path.join(dir, entry.name), contents, null);
+  }
+
+  for (const [modId, requiredBy] of contents.requires) {
+    if (!contents.provides.has(modId)) unsatisfied.push({ modId, requiredBy });
+  }
+
+  unsatisfied.sort((a, b) => a.modId.localeCompare(b.modId));
+  return { missingFiles, unsatisfied };
 }
 
 export function setModEnabled(instanceId: string, fileName: string, enabled: boolean): void {

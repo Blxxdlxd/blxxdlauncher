@@ -12,19 +12,21 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AccountSummary,
   ClientProfile,
+  InstalledMod,
   InstanceDraft,
   InstancePatch,
   InstanceSummary,
-  InstalledMod,
   InstanceTemplate,
-  LauncherBridge,
-  ModSearchResult,
-  ModSource,
-  ModVersion,
+  JavaInstallation,
   LaunchEvent,
+  LauncherBridge,
   LoaderBuild,
   LoaderKind,
   McVersion,
+  ModHealth,
+  ModSearchResult,
+  ModSource,
+  ModVersion,
 } from '../shared/types';
 
 /**
@@ -50,6 +52,8 @@ const IPC = {
   profilesList: 'profiles:list',
   templatesList: 'templates:list',
   versionsMinecraft: 'versions:minecraft',
+  javaList: 'java:list',
+  modsCheck: 'mods:check',
   versionsLoaders: 'versions:loaders',
   versionsBuilds: 'versions:builds',
   instancesList: 'instances:list',
@@ -86,6 +90,11 @@ const bridge: LauncherBridge = {
   listTemplates: () => ipcRenderer.invoke(IPC.templatesList) as Promise<InstanceTemplate[]>,
 
   listMinecraftVersions: () => ipcRenderer.invoke(IPC.versionsMinecraft) as Promise<McVersion[]>,
+
+  listJavaInstallations: () => ipcRenderer.invoke(IPC.javaList) as Promise<JavaInstallation[]>,
+
+  checkMods: (instanceId: string) =>
+    ipcRenderer.invoke(IPC.modsCheck, instanceId) as Promise<ModHealth>,
 
   listLoaders: (minecraftVersion: string) =>
     ipcRenderer.invoke(IPC.versionsLoaders, minecraftVersion) as Promise<LoaderKind[]>,

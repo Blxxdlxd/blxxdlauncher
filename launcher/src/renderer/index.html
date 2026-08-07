@@ -84,6 +84,12 @@
         </div>
         <p class="hint">Digits followed by M or G, e.g. <code>8G</code> or <code>6144M</code>.</p>
 
+        <label for="field-java">Java</label>
+        <select id="field-java"></select>
+        <p class="hint" id="java-hint">
+          Automatic uses the version's own requirement. Pick a newer one if a mod needs it.
+        </p>
+
         <p id="dialog-error" class="dialog-error" hidden></p>
 
         <menu class="dialog-actions">
@@ -123,6 +129,7 @@
       </div>
 
       <div id="mods-installed">
+        <div id="mods-health" class="mods-health" hidden></div>
         <ul id="mods-installed-list" class="mod-list"></ul>
       </div>
 

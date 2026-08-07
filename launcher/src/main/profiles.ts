@@ -13,10 +13,11 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { app } from 'electron';
 
 import { DIRS } from './paths';
-import type { InstanceTemplate, LoaderKind } from '../shared/types';
+import type { InstanceTemplate, JavaInstallation, LoaderKind } from '../shared/types';
 
 /**
  * Where the compiled client-core jars live.
@@ -165,6 +166,85 @@ export function resolveJava(major: number): string {
   }
 
   return exe.replace('javaw.exe', 'java.exe');
+}
+
+/**
+ * Every JVM we can find, so the user can pick one per instance.
+ *
+ * `resolveJava` answers "give me something that will run this"; this answers
+ * "what are my options". They are different questions and the second one cannot
+ * be derived from the first — automatic resolution deliberately returns a single
+ * answer, and the whole point of an override is disagreeing with it.
+ *
+ * Each candidate is probed with `java -version` rather than trusted from its
+ * directory name. A folder called `jdk-17` may hold anything, and a wrong guess
+ * here would be presented to the user as fact.
+ */
+export function detectJavaInstallations(): JavaInstallation[] {
+  const exe = process.platform === 'win32' ? 'javaw.exe' : 'java';
+  const found = new Map<string, JavaInstallation>();
+
+  const consider = (candidate: string, source: JavaInstallation['source']): void => {
+    const resolved = normaliseJavaPath(candidate, exe);
+    if (!resolved) return;
+
+    const key = resolved.toLowerCase();
+    // First writer wins, and configured entries are offered first, so a JDK
+    // listed in runtimes.json is labelled as configured rather than detected.
+    if (found.has(key)) return;
+
+    const probed = probeJavaVersion(resolved);
+    if (!probed) return;
+
+    found.set(key, { path: resolved, major: probed.major, version: probed.version, source });
+  };
+
+  for (const configured of Object.values(readConfiguredRuntimes())) {
+    consider(configured, 'configured');
+  }
+
+  if (process.env['JAVA_HOME']) {
+    consider(process.env['JAVA_HOME'], 'detected');
+  }
+
+  if (process.platform === 'win32') {
+    const roots = [process.env['ProgramFiles'] ?? 'C:\\Program Files', process.env['ProgramFiles(x86)']]
+      .filter((r): r is string => typeof r === 'string' && r.length > 0);
+
+    for (const root of roots) {
+      for (const vendor of ['Eclipse Adoptium', 'Java', 'Microsoft', 'Zulu', 'Amazon Corretto', 'BellSoft']) {
+        const base = path.join(root, vendor);
+        if (!fs.existsSync(base)) continue;
+        try {
+          for (const dir of fs.readdirSync(base)) {
+            consider(path.join(base, dir), 'detected');
+          }
+        } catch {
+          /* Unreadable vendor directory; skip it. */
+        }
+      }
+    }
+  }
+
+  // Ascending, so the list reads like a version ladder rather than filesystem
+  // order — which is what someone choosing between 17 and 21 is thinking about.
+  return [...found.values()].sort((a, b) => a.major - b.major || a.path.localeCompare(b.path));
+}
+
+/** @returns the JVM's major and full version, or null if it will not run. */
+function probeJavaVersion(javaPath: string): { major: number; version: string } | null {
+  // -version writes to stderr on every JVM ever shipped.
+  const probe = spawnSync(javaPath, ['-version'], { encoding: 'utf8', windowsHide: true });
+  if (probe.error) return null;
+
+  const output = `${probe.stderr ?? ''}${probe.stdout ?? ''}`;
+  // Matches both `1.8.0_492` (Java 8 and earlier) and `21.0.11` (9+).
+  const match = /version "((\d+)(?:\.(\d+))?[^"]*)"/.exec(output);
+  if (!match) return null;
+
+  const first = Number(match[2]);
+  const major = first === 1 ? Number(match[3] ?? 0) : first;
+  return Number.isFinite(major) && major > 0 ? { major, version: match[1] ?? String(major) } : null;
 }
 
 /** Modern era: Minecraft 1.21.1 on NeoForge, Java 21, Mixin-driven. */
