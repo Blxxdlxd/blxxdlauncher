@@ -47,8 +47,14 @@ const el = <T extends HTMLElement>(id: string): T => {
 };
 
 const accountName = el<HTMLSpanElement>('account-name');
+const accountLabel = el<HTMLSpanElement>('account-label');
+const accountAvatar = el<HTMLSpanElement>('account-avatar');
+const btnAccount = el<HTMLButtonElement>('btn-account');
 const btnLogin = el<HTMLButtonElement>('btn-login');
 const btnLogout = el<HTMLButtonElement>('btn-logout');
+const accountsDialog = el<HTMLDialogElement>('accounts-dialog');
+const accountsList = el<HTMLUListElement>('accounts-list');
+const accountsError = el<HTMLParagraphElement>('accounts-error');
 const btnOpenRoot = el<HTMLButtonElement>('btn-open-root');
 const instanceGrid = el<HTMLUListElement>('instance-grid');
 const btnNewInstance = el<HTMLButtonElement>('btn-new-instance');
@@ -68,6 +74,9 @@ const fieldSnapshots = el<HTMLInputElement>('field-snapshots');
 const fieldBuild = el<HTMLSelectElement>('field-build');
 const fieldName = el<HTMLInputElement>('field-name');
 const fieldIcon = el<HTMLInputElement>('field-icon');
+const blockPicker = el<HTMLDivElement>('block-picker');
+const artworkBlock = el<HTMLDivElement>('artwork-block');
+const artworkPreview = el<HTMLSpanElement>('artwork-preview');
 const fieldMemMax = el<HTMLInputElement>('field-mem-max');
 const fieldMemMin = el<HTMLInputElement>('field-mem-min');
 const fieldJava = el<HTMLSelectElement>('field-java');
@@ -83,17 +92,22 @@ const heroArt = el<HTMLDivElement>('hero-art');
 const heroName = el<HTMLHeadingElement>('hero-name');
 const heroBadges = el<HTMLDivElement>('hero-badges');
 const heroMeta = el<HTMLParagraphElement>('hero-meta');
+const heroDetails = el<HTMLDListElement>('hero-details');
 const heroActions = el<HTMLDivElement>('hero-actions');
 
+const settingsDialog = el<HTMLDialogElement>('settings-dialog');
+const fieldDirectory = el<HTMLInputElement>('field-directory');
+const fieldCfKey = el<HTMLInputElement>('field-cfkey');
+const cfKeyHint = el<HTMLParagraphElement>('cfkey-hint');
+
 const fieldTheme = el<HTMLSelectElement>('field-theme');
+const fieldStyle = el<HTMLSelectElement>('field-style');
 const fieldLayout = el<HTMLSelectElement>('field-layout');
 
 const friendsDialog = el<HTMLDialogElement>('friends-dialog');
 const friendsStatus = el<HTMLSpanElement>('friends-status');
 const friendsList = el<HTMLUListElement>('friends-list');
 const friendsError = el<HTMLParagraphElement>('friends-error');
-const friendsSetup = el<HTMLDivElement>('friends-setup');
-const friendsUrl = el<HTMLInputElement>('friends-url');
 const friendsAdd = el<HTMLDivElement>('friends-add');
 const friendsName = el<HTMLInputElement>('friends-name');
 
@@ -139,11 +153,72 @@ function append(line: string, cls?: 'err' | 'ok'): void {
   }
 }
 
+/**
+ * Skin data URIs already fetched this session, keyed by UUID.
+ *
+ * `null` is cached too, and deliberately: an account with a default skin, or
+ * one whose lookup failed, must not re-request on every render of the switcher.
+ * Main keeps its own on-disk cache; this one only avoids the IPC round trip.
+ */
+const skins = new Map<string, string | null>();
+
+/**
+ * Draw a player's head into `node`.
+ *
+ * The main process hands over the whole skin PNG and the crop happens here: a
+ * head is the 8x8 region at (8,8), with the hat layer at (40,8) drawn over it.
+ * Two background layers on one element do that with no image processing, and
+ * the first layer listed is the one on top.
+ *
+ * `background-size: <w>px auto` keeps this working for legacy 64x32 skins as
+ * well — the offsets are absolute from the top-left either way.
+ */
+function paintAvatar(node: HTMLElement, skin: string | null, name: string, size: number): void {
+  if (!skin) {
+    node.style.backgroundImage = '';
+    node.textContent = (name.trim()[0] ?? '?').toUpperCase();
+    return;
+  }
+
+  const scale = size / 8;
+  node.textContent = '';
+  node.style.backgroundImage = `url("${skin}"), url("${skin}")`;
+  node.style.backgroundSize = `${64 * scale}px auto, ${64 * scale}px auto`;
+  node.style.backgroundPosition =
+    `${-40 * scale}px ${-8 * scale}px, ${-8 * scale}px ${-8 * scale}px`;
+}
+
+/** Fetch a head if we have not already, then paint it. Never throws. */
+async function showAvatar(node: HTMLElement, account: AccountSummary, size: number): Promise<void> {
+  paintAvatar(node, skins.get(account.uuid) ?? null, account.name, size);
+  if (skins.has(account.uuid)) return;
+
+  try {
+    const skin = await window.launcher.accountSkin(account.uuid);
+    skins.set(account.uuid, skin);
+    // The node may have been re-rendered or repurposed while the request was in
+    // flight; only paint if it is still showing this account.
+    if (node.dataset['uuid'] === account.uuid) paintAvatar(node, skin, account.name, size);
+  } catch {
+    skins.set(account.uuid, null);
+  }
+}
+
 function setAccount(account: AccountSummary | null): void {
   signedIn = account !== null;
-  accountName.textContent = account ? account.name : 'Not signed in';
   btnLogin.hidden = signedIn;
-  btnLogout.hidden = !signedIn;
+  btnAccount.hidden = !signedIn;
+  accountLabel.hidden = signedIn;
+
+  if (account) {
+    accountName.textContent = account.name;
+    accountAvatar.dataset['uuid'] = account.uuid;
+    void showAvatar(accountAvatar, account, 28);
+  } else {
+    accountLabel.textContent = 'Not signed in';
+    delete accountAvatar.dataset['uuid'];
+  }
+
   refreshLaunchButtons();
 }
 
@@ -162,9 +237,10 @@ function setAccount(account: AccountSummary | null): void {
  */
 function setRestoring(cached: AccountSummary | null): void {
   signedIn = false;
-  accountName.textContent = cached ? `${cached.name} — restoring session…` : 'Restoring session…';
+  accountLabel.textContent = cached ? `${cached.name} — restoring session…` : 'Restoring session…';
+  accountLabel.hidden = false;
   btnLogin.hidden = true;
-  btnLogout.hidden = true;
+  btnAccount.hidden = true;
   refreshLaunchButtons();
 }
 
@@ -229,6 +305,480 @@ function shortBuild(loaderVersion: string, minecraftVersion: string): string {
     : loaderVersion;
 }
 
+/** "…/jdk-21.0.11/bin/javaw.exe" -> "jdk-21.0.11". The rest is noise here. */
+function javaLabel(summary: InstanceSummary): string {
+  const { instance } = summary;
+  if (!summary.javaReady || summary.javaPath === null) {
+    return `not found — needs Java ${instance.runtime.javaMajor}`;
+  }
+  const parts = summary.javaPath.split(/[\/]/).filter((p) => p.length > 0);
+  // Drop the trailing "bin/javaw.exe" to leave the JDK's own directory name.
+  const home = parts.length >= 3 ? parts[parts.length - 3] : parts[parts.length - 1];
+  return instance.javaPathOverride === null ? `${home} (automatic)` : `${home} (pinned)`;
+}
+
+/** Last path segment, for showing a jar without its directory. */
+function basename(p: string): string {
+  const parts = p.split(/[\/]/);
+  return parts[parts.length - 1] ?? p;
+}
+
+function formatDate(at: number): string {
+  return new Date(at).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/** One `dt`/`dd` pair. Returns the `dd` so async values can fill it in later. */
+function detail(list: HTMLDListElement, term: string, value: string): HTMLElement {
+  const dt = document.createElement('dt');
+  dt.textContent = term;
+  const dd = document.createElement('dd');
+  dd.textContent = value;
+  list.append(dt, dd);
+  return dd;
+}
+
+/* ------------------------------------------------------------ block icons */
+
+/*
+ * Isometric block icons, drawn here rather than shipped as image files.
+ *
+ * These are original drawings in the block idiom, not Minecraft's own icon
+ * assets — those belong to Mojang and are not ours to bundle into a build that
+ * gets handed to other people.
+ *
+ * Generating them costs nothing at runtime and gains two things over a sprite
+ * sheet: they are resolution-independent, so the 40px card tile and the 200px
+ * hero panel are both crisp, and a new block is one row in the table below.
+ */
+
+/** Which face a pattern is being asked about. */
+type FaceKind = 'top' | 'left' | 'right';
+
+/**
+ * Per-cell detail on top of the base colour and noise.
+ *
+ * Returns a brightness multiplier, an outright colour, or null to leave the
+ * cell alone. Multipliers do most of the work: mortar, plank seams and gem
+ * facets are all just "lighter here, darker there", and staying multiplicative
+ * means the pattern survives whatever base colour the block declares.
+ */
+type BlockPattern = (face: FaceKind, i: number, j: number) => number | string | null;
+
+interface BlockDef {
+  readonly id: string;
+  readonly label: string;
+  /** Base colour of the side faces. */
+  readonly side: string;
+  /** Top face, when it differs — grass being the obvious case. */
+  readonly top?: string;
+  /** 0 = flat, 1 = heavily speckled. Cobblestone is rough, gold is smooth. */
+  readonly noise?: number;
+  /**
+   * Spill the top colour over the first rows of the side faces, with a ragged
+   * lower edge. Grass needs it: the green overhangs the dirt rather than
+   * meeting it at a clean seam, and without it the cube reads as two materials
+   * stacked instead of one block.
+   */
+  readonly fringe?: boolean;
+  readonly pattern?: BlockPattern;
+  /**
+   * Cells across one face, when the default does not divide the way a pattern
+   * needs. A 3x3 grid with its own gridlines needs 7 (four lines, three cells);
+   * on 8 the lines cannot reach both edges and the grid comes out lopsided.
+   */
+  readonly steps?: number;
+}
+
+/** Cells across one face, unless a block asks for its own. */
+const STEPS = 8;
+
+/**
+ * A bevelled metal plate: darker outer edge, bright highlight just inside it.
+ *
+ * Iron and gold blocks are near-flat surfaces in game, so they should not carry
+ * gem marks at all — the frame is what separates them from a plain cube.
+ */
+const plate =
+  (bright: number, dim: number): BlockPattern =>
+  (_face, i, j) => {
+    const last = STEPS - 1;
+    if (i === 0 || j === 0 || i === last || j === last) return dim;
+    if (i === 1 || j === 1 || i === last - 1 || j === last - 1) return bright;
+    return null;
+  };
+
+/**
+ * A hand-drawn texture: one string per row, one character per cell.
+ *
+ * Some textures cannot be expressed as arithmetic. Cobblestone is irregular
+ * stones with cracks between them, and any modulo that produces "a crack every
+ * n cells" produces a zigzag lattice instead. Drawing the cells out is both
+ * shorter and the only way to get shapes that are genuinely uneven.
+ */
+const fromGrid =
+  (rows: readonly string[], legend: Readonly<Record<string, number>>): BlockPattern =>
+  (_face, i, j) => {
+    const row = rows[j % rows.length];
+    if (row === undefined) return null;
+    const cell = row[i % row.length];
+    return cell === undefined ? null : legend[cell] ?? null;
+  };
+
+const BLOCKS: readonly BlockDef[] = [
+  { id: 'grass', label: 'Grass', side: '#8a6440', top: '#6aa84f', fringe: true, noise: 0.5 },
+  { id: 'dirt', label: 'Dirt', side: '#8a6440', noise: 0.55 },
+  { id: 'stone', label: 'Stone', side: '#7d7d7d', noise: 0.3 },
+  {
+    id: 'cobblestone',
+    label: 'Cobblestone',
+    side: '#7a7a7a',
+    // Enough for each chunk to vary internally, not enough to blur the chunks.
+    noise: 0.26,
+    /*
+     * Stone, broken up.
+     *
+     * The previous version drew cracks between the stones, which at this size
+     * turned into a woven lattice — the cracks were as prominent as the stone.
+     * This is the same grey in irregular patches of two and three cells with no
+     * seams at all, which is what actually reads as cobble on a 40px tile.
+     */
+    pattern: fromGrid(
+      [
+        'LLmmmddd',
+        'LLmmdddd',
+        'ddLLmmLL',
+        'ddLLmmLL',
+        'dmmLLLmm',
+        'mmmLLdmm',
+        'LLmmddmm',
+        'LLmmdddd',
+      ],
+      { L: 1.22, m: 1.0, d: 0.79 },
+    ),
+  },
+  {
+    id: 'planks',
+    label: 'Oak planks',
+    side: '#b1854c',
+    noise: 0.22,
+    pattern: (_f, _i, j) => (j % 3 === 2 ? 0.7 : null),
+  },
+  {
+    id: 'crafting-table',
+    label: 'Crafting table',
+    side: '#9c6b3c',
+    top: '#a9743f',
+    noise: 0.25,
+    // 7 cells: gridlines at 0, 2, 4, 6 and the three slots at 1, 3, 5. On the
+    // default 8 the lines could not reach both edges, which is what made the
+    // worktop look off-centre.
+    steps: 7,
+    pattern: (face, i, j) => {
+      if (face === 'top') return i % 2 === 0 || j % 2 === 0 ? 0.66 : 1.1;
+      // Sides: tool panel below a lighter lip.
+      if (j < 2) return 1.12;
+      return j >= 3 && j <= 5 && i >= 1 && i <= 5 ? 0.72 : null;
+    },
+  },
+  {
+    id: 'furnace',
+    label: 'Furnace',
+    side: '#6d6d6d',
+    noise: 0.28,
+    pattern: (face, i, j) => {
+      // A lid seam, so the top is not a blank plate.
+      if (face === 'top') return j === 1 || j === 6 ? 0.88 : null;
+      // Only the left face gets the opening: a furnace has one front in game,
+      // and putting the mouth on both visible sides would read as two furnaces.
+      if (face !== 'left') return null;
+      if (j <= 1) return 1.14; // stone lip above the opening
+      const inMouth = i >= 2 && i <= 5 && j >= 3 && j <= 6;
+      if (!inMouth) return null;
+      // Lit grate along the bottom of the mouth; bars alternate.
+      if (j === 6) return i % 2 === 0 ? '#f0902c' : '#7c3a12';
+      // Top row of the mouth is the lintel catching a little light.
+      return j === 3 ? '#3d3d3d' : '#1d1d1d';
+    },
+  },
+  {
+    id: 'bricks',
+    label: 'Bricks',
+    side: '#96594a',
+    noise: 0.25,
+    pattern: (_f, i, j) => {
+      // Courses two cells tall, with the vertical joints offset each course.
+      if (j % 4 === 3) return 1.45;
+      return i % 4 === (Math.floor(j / 4) % 2 === 0 ? 3 : 1) ? 1.45 : null;
+    },
+  },
+  { id: 'sand', label: 'Sand', side: '#dbd2a2', noise: 0.24 },
+  { id: 'netherrack', label: 'Netherrack', side: '#7a3b3b', noise: 0.8 },
+  { id: 'end-stone', label: 'End stone', side: '#dcdfa6', noise: 0.42 },
+  {
+    id: 'obsidian',
+    label: 'Obsidian',
+    // Much darker, and the flecks are barely lighter than the base. The bright
+    // violet this had before read as amethyst or crying obsidian — obsidian is
+    // near-black glass with a faint sheen, and the sheen has to stay faint.
+    side: '#17131f',
+    noise: 0.3,
+    pattern: (_f, i, j) => ((i * 3 + j * 5) % 11 === 0 ? '#2b2440' : null),
+  },
+  {
+    id: 'bedrock',
+    label: 'Bedrock',
+    side: '#606060',
+    /*
+     * Speckle was right; it just had nowhere near enough range.
+     *
+     * The drawn version came out striped, because runs of two and three cells
+     * on a grid this small line up into bands however they are arranged. Noise
+     * above 1 widens the swing past what any other block uses, which is what
+     * gives bedrock its blown-out light and near-black cells.
+     */
+    noise: 1.85,
+  },
+  { id: 'diamond', label: 'Diamond block', side: '#4aedd9', noise: 0.2, pattern: plate(1.16, 0.84) },
+  { id: 'emerald', label: 'Emerald block', side: '#41d97e', noise: 0.2, pattern: plate(1.16, 0.84) },
+  { id: 'gold', label: 'Gold block', side: '#f4cf3e', noise: 0.12, pattern: plate(1.1, 0.86) },
+  { id: 'iron', label: 'Iron block', side: '#d6d6d6', noise: 0.12, pattern: plate(1.08, 0.88) },
+  { id: 'lapis', label: 'Lapis block', side: '#2a48a8', noise: 0.35, pattern: plate(1.28, 0.8) },
+  { id: 'redstone', label: 'Redstone block', side: '#a91e1e', noise: 0.35, pattern: plate(1.26, 0.8) },
+  {
+    id: 'glowstone',
+    label: 'Glowstone',
+    // Darker amber than before, so the lit cells have somewhere to be brighter
+    // *than*. On the old base the highlights clipped to near-white and the
+    // block lost its colour.
+    side: '#c28f33',
+    noise: 0.3,
+    /*
+     * Glowstone is lit specks embedded in amber, in ones and twos at no
+     * particular spacing. The plate frame it borrowed from the metal blocks was
+     * exactly wrong for it — a frame implies a manufactured surface, and this
+     * is the one block in the set that should look like it emits light rather
+     * than reflects it.
+     */
+    pattern: fromGrid(
+      [
+        'mBmmdmmB',
+        'BBmdmmBm',
+        'mmmmBmmd',
+        'dmBBmmdm',
+        'mmBmmBBm',
+        'BmmdmBmm',
+        'mmBmmmmd',
+        'mBBmdmBm',
+      ],
+      { B: 1.5, m: 1.0, d: 0.76 },
+    ),
+  },
+];
+
+/** Deterministic PRNG, so a block looks identical every time it is drawn. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashOf(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Multiply a hex colour's channels, clamping at 255. */
+function shade(hex: string, factor: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const channel = (shift: number): string =>
+    Math.min(255, Math.round(((n >> shift) & 0xff) * factor))
+      .toString(16)
+      .padStart(2, '0');
+  return '#' + channel(16) + channel(8) + channel(0);
+}
+
+interface Face {
+  readonly o: readonly [number, number];
+  readonly u: readonly [number, number];
+  readonly v: readonly [number, number];
+  readonly light: number;
+  readonly colour: string;
+  /** Which face this is, for patterns that treat one differently. */
+  readonly kind: FaceKind;
+}
+
+/**
+ * One isometric cube as an SVG data URI.
+ *
+ * Each of the three faces is a parallelogram split into a 4x4 grid of cells,
+ * every cell shaded a little differently from a seeded random — which is what
+ * reads as a pixel texture rather than three flat panels. Face brightness does
+ * the rest: the top catches the light, the right face is in shadow.
+ */
+/** Generated icons, by block id. Each is a few kilobytes and never changes. */
+const blockCache = new Map<string, string | null>();
+
+/**
+ * One isometric cube as an SVG data URI.
+ *
+ * Each of the three faces is a parallelogram split into an 8x8 grid of cells,
+ * every cell shaded a little differently from a seeded random — which is what
+ * reads as a pixel texture rather than three flat panels. Face brightness does
+ * the rest: the top catches the light, the right face is in shadow.
+ *
+ * A block's `pattern` then overrides individual cells, which is what separates
+ * bricks from planks from a plain cube. Without it every block was a coloured
+ * box and only the hue told them apart.
+ */
+function blockIcon(id: string): string | null {
+  const hit = blockCache.get(id);
+  if (hit !== undefined) return hit;
+
+  const def = BLOCKS.find((block) => block.id === id);
+  if (!def) {
+    blockCache.set(id, null);
+    return null;
+  }
+
+  const cells: string[] = [];
+  const jitter = def.noise ?? 0.4;
+  const steps = def.steps ?? STEPS;
+
+  // Origin, then the two edge vectors that sweep out each face.
+  const faces: readonly Face[] = [
+    { o: [0, 8], u: [16, -8], v: [16, 8], light: 1.0, colour: def.top ?? def.side, kind: 'top' },
+    { o: [0, 8], u: [16, 8], v: [0, 16], light: 0.78, colour: def.side, kind: 'left' },
+    { o: [16, 16], u: [16, -8], v: [0, 16], light: 0.58, colour: def.side, kind: 'right' },
+  ];
+
+  /*
+   * One random stream for the whole cube, consumed in face order.
+   *
+   * This is the arrangement the icons had when the grass fringe was picked, and
+   * the fringe is a function of where in the stream a face lands — so anything
+   * that changes the consumption order changes the edge. Hence the discarded
+   * segment below rather than a tidier per-face seed: the tidier version draws
+   * a different fringe.
+   *
+   * Segments come out as top, then left, then right. Both visible side faces
+   * use the left segment, because that is the face whose edge was chosen; the
+   * right one is simply never drawn.
+   */
+  const rand = seeded(hashOf(def.id));
+  const segment = (): ReadonlyArray<ReadonlyArray<{ roll: number; variation: number }>> => {
+    const grid: { roll: number; variation: number }[][] = [];
+    for (let x = 0; x < steps; x++) {
+      const column: { roll: number; variation: number }[] = [];
+      for (let y = 0; y < steps; y++) {
+        // Both draws happen every cell, whether or not they are used, so the
+        // sequence — and therefore the texture — stays identical between blocks
+        // that do and do not have a fringe.
+        const roll = rand();
+        column.push({ roll, variation: 1 + (rand() - 0.5) * jitter * 0.55 });
+      }
+      grid.push(column);
+    }
+    return grid;
+  };
+
+  const topTexture = segment();
+  const sideTexture = segment();
+
+  for (const face of faces) {
+    const isSide = face.kind !== 'top';
+    const grid = isSide ? sideTexture : topTexture;
+
+    for (let i = 0; i < steps; i++) {
+      for (let j = 0; j < steps; j++) {
+        /*
+         * No mirroring: both side faces draw the chosen texture the same way
+         * round, so the left face is a copy of the right rather than its
+         * reflection. Mirroring reads more symmetrically on the cube, but it
+         * is not the edge that was picked.
+         */
+        const tx = i;
+        const cell = grid[tx]?.[j];
+        const roll = cell?.roll ?? 0;
+        const variation = cell?.variation ?? 1;
+
+        /*
+         * Grass overhang. The first two rows are always green, so the top edge
+         * is unbroken all the way round — a gap there reads as a missing pixel
+         * rather than as texture. Row two is where the raggedness lives, and
+         * the leading column is forced on so the front corner keeps the deeper
+         * overhang instead of being the one place the fringe is thinnest.
+         */
+        const fringed =
+          def.fringe === true && isSide && (j < 2 || (j === 2 && (tx === 0 || roll < 0.45)));
+
+        let base = fringed ? def.top ?? face.colour : face.colour;
+        let light = face.light * variation;
+
+        // Pattern is skipped on fringed cells: the grass edge should not also
+        // be carrying the dirt's detail.
+        if (!fringed) {
+          const detail = def.pattern?.(face.kind, tx, j) ?? null;
+          if (typeof detail === 'number') light *= detail;
+          else if (typeof detail === 'string') base = detail;
+        }
+
+        const point = (di: number, dj: number): string => {
+          const x = face.o[0] + ((i + di) / steps) * face.u[0] + ((j + dj) / steps) * face.v[0];
+          const y = face.o[1] + ((i + di) / steps) * face.u[1] + ((j + dj) / steps) * face.v[1];
+          return x.toFixed(2) + ',' + y.toFixed(2);
+        };
+        const pts = [point(0, 0), point(1, 0), point(1, 1), point(0, 1)].join(' ');
+        cells.push('<polygon points="' + pts + '" fill="' + shade(base, light) + '"/>');
+      }
+    }
+  }
+
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">' +
+    cells.join('') +
+    '</svg>';
+
+  // encodeURIComponent, not base64: it keeps the markup readable in devtools,
+  // and it escapes the '#' in every fill — unescaped, the first one would be
+  // read as the start of a URL fragment and cut the image off.
+  const uri = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  blockCache.set(id, uri);
+  return uri;
+}
+
+/** True for an icon value that names a block rather than being a glyph. */
+function isBlockIcon(icon: string): boolean {
+  return icon.startsWith('block:');
+}
+
+/**
+ * Draw an instance's icon into a tile: a block picture, or the glyph itself.
+ * Artwork, when set, is painted over this by paintArtwork().
+ */
+function paintIcon(node: HTMLElement, icon: string): void {
+  const uri = isBlockIcon(icon) ? blockIcon(icon.slice('block:'.length)) : null;
+  if (uri === null) {
+    node.style.backgroundImage = '';
+    node.textContent = icon;
+    node.classList.remove('has-block');
+    return;
+  }
+  node.textContent = '';
+  node.style.backgroundImage = 'url("' + uri + '")';
+  node.classList.add('has-block');
+}
+
 function badge(text: string, kind?: 'muted' | 'warn' | 'error'): HTMLSpanElement {
   const span = document.createElement('span');
   span.className = kind ? `badge ${kind}` : 'badge';
@@ -236,8 +786,52 @@ function badge(text: string, kind?: 'muted' | 'warn' | 'error'): HTMLSpanElement
   return span;
 }
 
+/**
+ * Artwork already fetched this session, by instance id.
+ *
+ * `null` is cached as well as images: an instance with no artwork must not
+ * re-ask on every re-render, and re-renders happen on every launch event.
+ */
+const artwork = new Map<string, string | null>();
+
+/**
+ * Show `uri` as the tile's picture, or fall back to the icon glyph.
+ *
+ * `cover` rather than `contain`: these tiles are square and screenshots are
+ * not, and letterboxing a 16:9 image inside a 40px square leaves almost no
+ * picture. Cropping the edges of a decorative image loses nothing.
+ */
+function paintArtwork(node: HTMLElement, uri: string | null, glyph: string): void {
+  if (uri === null) {
+    node.classList.remove('has-art');
+    paintIcon(node, glyph);
+    return;
+  }
+  node.textContent = '';
+  node.style.backgroundImage = `url("${uri}")`;
+  node.classList.remove('has-block');
+  node.classList.add('has-art');
+}
+
+/** Fetch artwork if not already known, then paint it. Never throws. */
+async function showArtwork(node: HTMLElement, id: string, glyph: string): Promise<void> {
+  paintArtwork(node, artwork.get(id) ?? null, glyph);
+  if (artwork.has(id)) return;
+
+  try {
+    const uri = await window.launcher.instanceArtwork(id);
+    artwork.set(id, uri);
+    // The node may have been replaced by a re-render while this was in flight.
+    if (node.dataset['art'] === id) paintArtwork(node, uri, glyph);
+  } catch {
+    artwork.set(id, null);
+  }
+}
+
 function renderInstances(): void {
   instanceGrid.replaceChildren();
+  el<HTMLSpanElement>('instance-count').textContent =
+    instances.length === 0 ? '' : String(instances.length);
 
   if (instances.length === 0) {
     const empty = document.createElement('li');
@@ -260,7 +854,9 @@ function renderInstances(): void {
 
     const icon = document.createElement('div');
     icon.className = 'instance-icon';
-    icon.textContent = instance.icon;
+    paintIcon(icon, instance.icon);
+    icon.dataset['art'] = instance.id;
+    void showArtwork(icon, instance.id, instance.icon);
 
     const body = document.createElement('div');
     body.className = 'instance-body';
@@ -293,7 +889,16 @@ function renderInstances(): void {
     meta.className = 'instance-meta';
     meta.textContent = `${formatPlayed(instance.lastPlayed)} · ${formatSize(summary.sizeBytes)}`;
 
-    body.append(title, badges, meta);
+    // The library layout hides the badges to keep rows compact, which left the
+    // sidebar showing names alone. This says the same thing in one line.
+    const sub = document.createElement('p');
+    sub.className = 'instance-sub';
+    sub.textContent =
+      runtime.loader === 'vanilla'
+        ? `${runtime.minecraftVersion} · vanilla`
+        : `${runtime.minecraftVersion} · ${runtime.loader}`;
+
+    body.append(title, sub, badges, meta);
 
     const actions = document.createElement('div');
     actions.className = 'instance-actions';
@@ -355,15 +960,42 @@ function select(id: string): void {
  * by CSS in this layout, and reparenting them would leave the other layouts
  * with no buttons at all after a switch.
  */
+/**
+ * Newest request wins.
+ *
+ * Counting mods is a directory read in the main process, and clicking down a
+ * list of instances fires one per click. Without this, a slow early read can
+ * land after a fast later one and leave the wrong count on screen.
+ */
+let modCountToken = 0;
+
+async function fillModCount(instanceId: string, cell: HTMLElement): Promise<void> {
+  const token = ++modCountToken;
+  try {
+    const mods = await window.launcher.listInstalledMods(instanceId);
+    if (token !== modCountToken) return;
+    const enabled = mods.filter((mod) => mod.enabled).length;
+    const disabled = mods.length - enabled;
+    cell.textContent =
+      mods.length === 0 ? 'none' : disabled === 0 ? `${enabled}` : `${enabled} on · ${disabled} off`;
+  } catch {
+    if (token === modCountToken) cell.textContent = 'could not read';
+  }
+}
+
 function renderHero(): void {
   const summary = instances.find((entry) => entry.instance.id === selectedId);
 
   if (!summary) {
-    heroName.textContent = 'Nothing selected';
+    heroName.textContent = instances.length === 0 ? 'No instances yet' : 'Nothing selected';
     heroArt.textContent = '';
     heroBadges.replaceChildren();
-    heroMeta.textContent = '';
+    heroMeta.textContent =
+      instances.length === 0
+        ? 'Create one with New instance — pick a Minecraft version and a loader, and the launcher installs the rest.'
+        : 'Pick an instance on the left.';
     heroActions.replaceChildren();
+    heroDetails.replaceChildren();
     return;
   }
 
@@ -371,7 +1003,9 @@ function renderHero(): void {
   const { runtime } = instance;
 
   heroArt.style.setProperty('--accent', summary.accent);
-  heroArt.textContent = instance.icon;
+  paintIcon(heroArt, instance.icon);
+  heroArt.dataset['art'] = instance.id;
+  void showArtwork(heroArt, instance.id, instance.icon);
   heroName.textContent = instance.name;
 
   heroBadges.replaceChildren(
@@ -385,7 +1019,24 @@ function renderHero(): void {
   if (!summary.installed) heroBadges.append(badge('not installed', 'warn'));
   if (!summary.javaReady) heroBadges.append(badge(`needs Java ${runtime.javaMajor}`, 'error'));
 
-  heroMeta.textContent = `${formatPlayed(instance.lastPlayed)} · ${formatSize(summary.sizeBytes)}`;
+  heroMeta.textContent = formatPlayed(instance.lastPlayed);
+
+  heroDetails.replaceChildren();
+  detail(heroDetails, 'Java', javaLabel(summary));
+  detail(heroDetails, 'Heap', `${instance.memoryMin} min · ${instance.memoryMax} max`);
+  const modsCell = detail(heroDetails, 'Mods', '…');
+  detail(heroDetails, 'On disk', formatSize(summary.sizeBytes));
+  detail(
+    heroDetails,
+    'Client core',
+    summary.clientCoreJar === null ? 'none for this version' : basename(summary.clientCoreJar),
+  );
+  if (instance.extraJvmArgs.length > 0) {
+    detail(heroDetails, 'JVM flags', `${instance.extraJvmArgs.length} extra`);
+  }
+  detail(heroDetails, 'Created', formatDate(instance.createdAt));
+
+  void fillModCount(instance.id, modsCell);
 
   const play = makeButton('Play', () => void startLaunch(instance.id), 'primary');
   play.dataset['play'] = instance.id;
@@ -435,7 +1086,39 @@ async function startLaunch(id: string): Promise<void> {
 /* ------------------------------------------------------------------ dialogs */
 
 /**
- * Which instance the dialog is editing, or null when creating.
+ * Block chosen in the picker, or null when the icon is a typed glyph.
+ *
+ * Kept beside the text field rather than inside it: the field would otherwise
+ * have to show "block:crafting-table", which is the storage format and not
+ * something to put in front of anyone.
+ */
+let chosenBlock: string | null = null;
+
+/** Build the picker once; selection is a class toggle from then on. */
+function buildBlockPicker(): void {
+  for (const def of BLOCKS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'block-swatch';
+    button.dataset['block'] = def.id;
+    button.title = def.label;
+    // aria-label, because the button's only content is a background image.
+    button.setAttribute('aria-label', def.label);
+    button.style.backgroundImage = `url("${blockIcon(def.id) ?? ''}")`;
+    button.addEventListener('click', () => selectBlock(def.id));
+    blockPicker.appendChild(button);
+  }
+}
+
+function selectBlock(id: string | null): void {
+  chosenBlock = id;
+  if (id !== null) fieldIcon.value = '';
+  for (const node of Array.from(blockPicker.querySelectorAll<HTMLElement>('.block-swatch'))) {
+    node.classList.toggle('selected', node.dataset['block'] === id);
+  }
+}
+
+/** Which instance the dialog is editing, or null when creating.
  *
  * One dialog serves both jobs because the fields are identical bar the version
  * picker — which is hidden when editing, since changing the era under an
@@ -624,6 +1307,8 @@ async function refreshBuilds(): Promise<void> {
 
 async function openCreateDialog(): Promise<void> {
   editing = null;
+  // Nothing to attach artwork to until the instance exists.
+  artworkBlock.hidden = true;
 
   dialogTitle.textContent = 'New instance';
   dialogConfirm.textContent = 'Create';
@@ -631,7 +1316,8 @@ async function openCreateDialog(): Promise<void> {
   runtimeBlock.hidden = false;
 
   fieldName.value = '';
-  fieldIcon.value = '⬦';
+  fieldIcon.value = '';
+  selectBlock('grass');
   fieldMemMax.value = '8G';
   fieldMemMin.value = '4G';
   fieldJvm.value = '';
@@ -670,13 +1356,24 @@ function openEditDialog(summary: InstanceSummary): void {
   void refreshBuilds();
 
   fieldName.value = summary.instance.name;
-  fieldIcon.value = summary.instance.icon;
+  // An existing block icon selects its swatch; anything else is a glyph.
+  if (isBlockIcon(summary.instance.icon)) {
+    fieldIcon.value = '';
+    selectBlock(summary.instance.icon.slice('block:'.length));
+  } else {
+    fieldIcon.value = summary.instance.icon;
+    selectBlock(null);
+  }
   fieldMemMax.value = summary.instance.memoryMax;
   fieldMemMin.value = summary.instance.memoryMin;
   fieldJvm.value = summary.instance.extraJvmArgs.join('\n');
   currentRequiredMajor = summary.instance.runtime.javaMajor;
   void renderJavaChoices(summary.instance.javaPathOverride, currentRequiredMajor);
   dialogError.hidden = true;
+
+  artworkBlock.hidden = false;
+  artworkPreview.dataset['art'] = summary.instance.id;
+  void showArtwork(artworkPreview, summary.instance.id, summary.instance.icon);
 
   dialog.showModal();
   fieldName.focus();
@@ -804,7 +1501,7 @@ dialogForm.addEventListener('submit', (event) => {
   }
 
   const name = fieldName.value.trim();
-  const icon = fieldIcon.value.trim();
+  const icon = chosenBlock !== null ? `block:${chosenBlock}` : fieldIcon.value.trim();
   const memoryMax = fieldMemMax.value.trim().toUpperCase();
   const memoryMin = fieldMemMin.value.trim().toUpperCase();
   const javaPathOverride = fieldJava.value.length > 0 ? fieldJava.value : null;
@@ -1330,11 +2027,132 @@ function handleLaunchEvent(event: LaunchEvent): void {
   }
 }
 
+/* ----------------------------------------------------------- accounts */
+
+/** Disable every control in the dialog while a switch is in flight. */
+function setAccountsBusy(busy: boolean): void {
+  // Array.from, not for-of: the tsconfig lib does not include DOM.Iterable.
+  for (const node of Array.from(accountsDialog.querySelectorAll('button'))) {
+    node.disabled = busy;
+  }
+  accountsDialog.classList.toggle('busy', busy);
+}
+
+function showAccountsError(message: string | null): void {
+  accountsError.textContent = message ?? '';
+  accountsError.hidden = message === null;
+}
+
+async function renderAccounts(): Promise<void> {
+  const listing = await window.launcher.listAccounts();
+  accountsList.replaceChildren();
+
+  if (listing.accounts.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'mod-empty';
+    empty.textContent = 'No accounts yet. Add one to get started.';
+    accountsList.appendChild(empty);
+  }
+
+  for (const account of listing.accounts) {
+    const active = account.uuid === listing.activeUuid;
+
+    const row = document.createElement('li');
+    row.className = active ? 'account-row active' : 'account-row';
+
+    const avatar = document.createElement('span');
+    avatar.className = 'avatar large';
+    avatar.dataset['uuid'] = account.uuid;
+    void showAvatar(avatar, account, 40);
+
+    const body = document.createElement('div');
+    body.className = 'account-row-body';
+
+    const name = document.createElement('strong');
+    name.textContent = account.name;
+
+    const state = document.createElement('span');
+    state.className = 'account-row-state';
+    state.textContent = active ? 'signed in' : 'stored';
+
+    body.append(name, state);
+
+    const actions = document.createElement('div');
+    actions.className = 'account-row-actions';
+
+    if (!active) {
+      const use = document.createElement('button');
+      use.type = 'button';
+      use.className = 'primary';
+      use.textContent = 'Switch';
+      use.addEventListener('click', () => {
+        void (async () => {
+          setAccountsBusy(true);
+          showAccountsError(null);
+          state.textContent = 'signing in…';
+          try {
+            setAccount(await window.launcher.switchAccount(account.uuid));
+            append(`switched to ${account.name}`, 'ok');
+            await renderAccounts();
+          } catch (err) {
+            showAccountsError((err as Error).message);
+            state.textContent = 'stored';
+          } finally {
+            setAccountsBusy(false);
+          }
+        })();
+      });
+      actions.appendChild(use);
+    }
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      void (async () => {
+        setAccountsBusy(true);
+        showAccountsError(null);
+        try {
+          await window.launcher.removeAccount(account.uuid);
+          // Removing the live account ends the session; the others survive.
+          if (active) {
+            setAccount(null);
+            append(`signed out of ${account.name}`);
+          } else {
+            append(`removed ${account.name}`);
+          }
+          await renderAccounts();
+        } catch (err) {
+          showAccountsError((err as Error).message);
+        } finally {
+          setAccountsBusy(false);
+        }
+      })();
+    });
+    actions.appendChild(remove);
+
+    row.append(avatar, body, actions);
+    accountsList.appendChild(row);
+  }
+
+  // Nothing to sign out of when no account is live.
+  btnLogout.hidden = listing.activeUuid === null;
+}
+
+/**
+ * Interactive sign-in, shared by the top-bar button and "Add account".
+ * `select_account` is set on the Microsoft side, so this always shows the
+ * picker rather than silently reusing the last session.
+ */
+async function doLogin(): Promise<void> {
+  setAccount(await window.launcher.login());
+  append('signed in', 'ok');
+}
+
 btnLogin.addEventListener('click', async () => {
   btnLogin.disabled = true;
   try {
-    setAccount(await window.launcher.login());
-    append('signed in', 'ok');
+    await doLogin();
   } catch (err) {
     append(`sign-in failed: ${(err as Error).message}`, 'err');
   } finally {
@@ -1342,13 +2160,108 @@ btnLogin.addEventListener('click', async () => {
   }
 });
 
-btnLogout.addEventListener('click', async () => {
-  await window.launcher.logout();
-  setAccount(null);
-  append('signed out');
+btnAccount.addEventListener('click', () => {
+  void (async () => {
+    showAccountsError(null);
+    try {
+      await renderAccounts();
+      accountsDialog.showModal();
+    } catch (err) {
+      append(`could not list accounts: ${(err as Error).message}`, 'err');
+    }
+  })();
+});
+
+el<HTMLButtonElement>('accounts-add').addEventListener('click', () => {
+  void (async () => {
+    setAccountsBusy(true);
+    showAccountsError(null);
+    try {
+      await doLogin();
+      await renderAccounts();
+    } catch (err) {
+      showAccountsError((err as Error).message);
+    } finally {
+      setAccountsBusy(false);
+    }
+  })();
+});
+
+el<HTMLButtonElement>('accounts-close').addEventListener('click', () => accountsDialog.close());
+
+btnLogout.addEventListener('click', () => {
+  void (async () => {
+    setAccountsBusy(true);
+    try {
+      await window.launcher.logout();
+      setAccount(null);
+      append('signed out');
+      await renderAccounts();
+    } catch (err) {
+      showAccountsError((err as Error).message);
+    } finally {
+      setAccountsBusy(false);
+    }
+  })();
+});
+
+/**
+ * Repaint every tile showing this instance.
+ *
+ * The dialog preview, the card and the hero can all be on screen at once, so
+ * changing the picture has to reach all three rather than only the control the
+ * user clicked.
+ */
+function refreshArtwork(id: string, uri: string | null, glyph: string): void {
+  artwork.set(id, uri);
+  for (const node of Array.from(document.querySelectorAll<HTMLElement>(`[data-art="${id}"]`))) {
+    paintArtwork(node, uri, glyph);
+  }
+}
+
+el<HTMLButtonElement>('artwork-choose').addEventListener('click', () => {
+  void (async () => {
+    if (!editing) return;
+    const { id, icon } = editing.instance;
+    try {
+      const uri = await window.launcher.chooseInstanceArtwork(id);
+      // Null means the picker was dismissed, which is not a failure and should
+      // leave the existing artwork alone.
+      if (uri !== null) refreshArtwork(id, uri, icon);
+    } catch (err) {
+      dialogError.textContent = (err as Error).message;
+      dialogError.hidden = false;
+    }
+  })();
+});
+
+el<HTMLButtonElement>('artwork-clear').addEventListener('click', () => {
+  void (async () => {
+    if (!editing) return;
+    const { id, icon } = editing.instance;
+    try {
+      await window.launcher.clearInstanceArtwork(id);
+      refreshArtwork(id, null, icon);
+    } catch (err) {
+      dialogError.textContent = (err as Error).message;
+      dialogError.hidden = false;
+    }
+  })();
+});
+
+buildBlockPicker();
+
+fieldIcon.addEventListener('input', () => {
+  if (fieldIcon.value.trim().length > 0) selectBlock(null);
 });
 
 btnOpenRoot.addEventListener('click', () => void window.launcher.openRoot());
+
+el<HTMLButtonElement>('btn-clear-log').addEventListener('click', () => {
+  // replaceChildren, not textContent: the log holds one element per line and
+  // the empty-state hint keys off :empty, which text nodes would defeat.
+  log.replaceChildren();
+});
 
 window.launcher.onLaunchEvent(handleLaunchEvent);
 
@@ -1377,7 +2290,7 @@ function renderFriends(): void {
   friendsList.replaceChildren();
 
   if (!directory.configured) {
-    friendsList.appendChild(note('Set a directory address to use friends.'));
+    friendsList.appendChild(note('Add a friends directory in Settings to use this.'));
     return;
   }
 
@@ -1495,8 +2408,6 @@ el<HTMLButtonElement>('btn-friends').addEventListener('click', () => {
       // Asking for the state is also what tells main to connect, so a user with
       // no directory configured never opens a socket at all.
       directory = await window.launcher.getDirectoryState();
-      friendsUrl.value = (await window.launcher.getSettings()).directoryUrl;
-      friendsSetup.hidden = directory.configured;
       renderFriends();
       friendsDialog.showModal();
     } catch (err) {
@@ -1506,20 +2417,6 @@ el<HTMLButtonElement>('btn-friends').addEventListener('click', () => {
 });
 
 el<HTMLButtonElement>('friends-close').addEventListener('click', () => friendsDialog.close());
-
-el<HTMLButtonElement>('friends-settings').addEventListener('click', () => {
-  friendsSetup.hidden = !friendsSetup.hidden;
-  if (!friendsSetup.hidden) friendsUrl.focus();
-});
-
-el<HTMLButtonElement>('friends-save').addEventListener('click', () => {
-  void (async () => {
-    await window.launcher.setSettings({ directoryUrl: friendsUrl.value.trim() });
-    directory = await window.launcher.getDirectoryState();
-    friendsSetup.hidden = directory.configured;
-    renderFriends();
-  })();
-});
 
 function submitAdd(): void {
   const name = friendsName.value.trim();
@@ -1549,9 +2446,11 @@ window.launcher.onDirectory((next) => {
 function applyAppearance(settings: LauncherSettings): void {
   const root = document.documentElement;
   root.dataset['theme'] = settings.theme;
+  root.dataset['style'] = settings.style;
   root.dataset['layout'] = settings.layout;
 
   fieldTheme.value = settings.theme;
+  fieldStyle.value = settings.style;
   fieldLayout.value = settings.layout;
 }
 
@@ -1566,6 +2465,7 @@ function applyAppearance(settings: LauncherSettings): void {
 function changeAppearance(patch: Partial<LauncherSettings>): void {
   const root = document.documentElement;
   if (patch.theme) root.dataset['theme'] = patch.theme;
+  if (patch.style) root.dataset['style'] = patch.style;
   if (patch.layout) root.dataset['layout'] = patch.layout;
 
   void window.launcher.setSettings(patch).catch((err: Error) => {
@@ -1573,8 +2473,62 @@ function changeAppearance(patch: Partial<LauncherSettings>): void {
   });
 }
 
+el<HTMLButtonElement>('btn-settings').addEventListener('click', () => {
+  void (async () => {
+    try {
+      const current = await window.launcher.getSettings();
+      fieldDirectory.value = current.directoryUrl;
+
+      // The key itself is never read back out of the main process — only
+      // whether one exists. A password field showing a real credential invites
+      // it being copied out of a screenshot.
+      const configured = await window.launcher.curseforgeConfigured();
+      fieldCfKey.value = '';
+      cfKeyHint.textContent = configured
+        ? 'A key is set. Type a new one to replace it.'
+        : 'Needed to browse CurseForge.';
+
+      settingsDialog.showModal();
+    } catch (err) {
+      append(`could not open settings: ${(err as Error).message}`, 'err');
+    }
+  })();
+});
+
+/** Applied on close rather than per keystroke: these are text fields. */
+function commitSettings(): void {
+  void (async () => {
+    try {
+      await window.launcher.setSettings({ directoryUrl: fieldDirectory.value.trim() });
+
+      const key = fieldCfKey.value.trim();
+      if (key.length > 0) {
+        await window.launcher.setCurseforgeKey(key);
+        fieldCfKey.value = '';
+      }
+
+      // Re-reading is what makes main reconnect against a changed address.
+      directory = await window.launcher.getDirectoryState();
+      if (friendsDialog.open) renderFriends();
+    } catch (err) {
+      append(`could not save settings: ${(err as Error).message}`, 'err');
+    }
+  })();
+}
+
+el<HTMLButtonElement>('settings-close').addEventListener('click', () => {
+  commitSettings();
+  settingsDialog.close();
+});
+
+settingsDialog.addEventListener('close', commitSettings);
+
 fieldTheme.addEventListener('change', () => {
   changeAppearance({ theme: fieldTheme.value as LauncherSettings['theme'] });
+});
+
+fieldStyle.addEventListener('change', () => {
+  changeAppearance({ style: fieldStyle.value as LauncherSettings['style'] });
 });
 
 fieldLayout.addEventListener('change', () => {

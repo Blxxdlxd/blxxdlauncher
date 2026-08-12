@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DIRS, ensureDir } from './paths';
+import { BUNDLED_CURSEFORGE_KEY } from './edition';
 
 const API = 'https://api.curseforge.com/v1';
 
@@ -68,7 +69,11 @@ export function apiKey(): string | null {
       cachedKey = null;
     }
   }
-  return cachedKey;
+
+  // A key the user entered wins; the bundled one is only a fallback, so a build
+  // that ships with a key can still be pointed at a different one without
+  // rebuilding. Empty in a public build, where this returns null as before.
+  return cachedKey ?? (BUNDLED_CURSEFORGE_KEY.length > 0 ? BUNDLED_CURSEFORGE_KEY : null);
 }
 
 export function setApiKey(key: string | null): void {

@@ -281,6 +281,21 @@ function summarise(instance: Instance): InstanceSummary {
   };
 }
 
+
+/**
+ * Accept either a block id or a short glyph.
+ *
+ * Block ids ("block:crafting-table") are longer than the four characters a
+ * glyph is capped at, so they are matched first — truncating one would leave
+ * "bloc" and the tile would render that as its icon. The pattern is
+ * deliberately narrow: this value ends up in a CSS url() in the renderer.
+ */
+function normaliseIcon(raw: string, fallback: string): string {
+  const value = raw.trim();
+  if (/^block:[a-z][a-z-]{0,23}$/.test(value)) return value;
+  return value.slice(0, 4) || fallback;
+}
+
 export function listInstances(): InstanceSummary[] {
   // Most recently played first, then newest. Someone with eight instances is
   // almost always reaching for the one they used last.
@@ -339,7 +354,7 @@ export async function createInstance(draft: InstanceDraft): Promise<InstanceSumm
     memoryMax: normaliseMemory(draft.memoryMax, DEFAULT_MEMORY_MAX),
     memoryMin: normaliseMemory(draft.memoryMin, DEFAULT_MEMORY_MIN),
     extraJvmArgs: (draft.extraJvmArgs ?? []).filter((arg) => arg.trim().length > 0),
-    icon: draft.icon.trim().slice(0, 4) || '⬦',
+    icon: normaliseIcon(draft.icon, '⬦'),
     javaPathOverride: draft.javaPathOverride?.trim() || null,
     createdAt: Date.now(),
     lastPlayed: null,
@@ -359,7 +374,7 @@ export function updateInstance(id: string, patch: InstancePatch): InstanceSummar
     // directory holding their worlds; renaming an instance must not move it.
     instance.name = patch.name.trim();
   }
-  if (patch.icon !== undefined) instance.icon = patch.icon.trim().slice(0, 4) || instance.icon;
+  if (patch.icon !== undefined) instance.icon = normaliseIcon(patch.icon, instance.icon);
   if (patch.memoryMax !== undefined) {
     instance.memoryMax = normaliseMemory(patch.memoryMax, instance.memoryMax);
   }

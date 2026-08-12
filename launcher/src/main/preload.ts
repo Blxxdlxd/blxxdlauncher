@@ -10,6 +10,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // `import type` is fully erased, so these cost nothing at runtime.
 import type {
+  AccountListing,
   AccountSummary,
   ClientProfile,
   DirectoryState,
@@ -51,6 +52,10 @@ const IPC = {
   authRestore: 'auth:restore',
   authCached: 'auth:cached',
   authLogout: 'auth:logout',
+  authList: 'auth:list',
+  authSwitch: 'auth:switch',
+  authRemove: 'auth:remove',
+  authSkin: 'auth:skin',
   profilesList: 'profiles:list',
   templatesList: 'templates:list',
   versionsMinecraft: 'versions:minecraft',
@@ -69,6 +74,9 @@ const IPC = {
   instanceDuplicate: 'instances:duplicate',
   instanceDelete: 'instances:delete',
   instanceOpenFolder: 'instances:open-folder',
+  artworkGet: 'artwork:get',
+  artworkChoose: 'artwork:choose',
+  artworkClear: 'artwork:clear',
   modsSearch: 'mods:search',
   modsVersions: 'mods:versions',
   modsInstall: 'mods:install',
@@ -91,6 +99,14 @@ const bridge: LauncherBridge = {
   restoreSession: () => ipcRenderer.invoke(IPC.authRestore) as Promise<AccountSummary | null>,
 
   logout: () => ipcRenderer.invoke(IPC.authLogout) as Promise<void>,
+
+  listAccounts: () => ipcRenderer.invoke(IPC.authList) as Promise<AccountListing>,
+
+  switchAccount: (uuid) => ipcRenderer.invoke(IPC.authSwitch, uuid) as Promise<AccountSummary>,
+
+  removeAccount: (uuid) => ipcRenderer.invoke(IPC.authRemove, uuid) as Promise<void>,
+
+  accountSkin: (uuid) => ipcRenderer.invoke(IPC.authSkin, uuid) as Promise<string | null>,
 
   listProfiles: () => ipcRenderer.invoke(IPC.profilesList) as Promise<ClientProfile[]>,
 
@@ -138,6 +154,15 @@ const bridge: LauncherBridge = {
 
   deleteInstance: (id: string, deleteFiles: boolean) =>
     ipcRenderer.invoke(IPC.instanceDelete, id, deleteFiles) as Promise<void>,
+
+  instanceArtwork: (id: string) =>
+    ipcRenderer.invoke(IPC.artworkGet, id) as Promise<string | null>,
+
+  chooseInstanceArtwork: (id: string) =>
+    ipcRenderer.invoke(IPC.artworkChoose, id) as Promise<string | null>,
+
+  clearInstanceArtwork: (id: string) =>
+    ipcRenderer.invoke(IPC.artworkClear, id) as Promise<void>,
 
   openInstanceFolder: (id: string) =>
     ipcRenderer.invoke(IPC.instanceOpenFolder, id) as Promise<void>,

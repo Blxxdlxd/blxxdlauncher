@@ -10,41 +10,25 @@
       <h1>Blxxdlauncher</h1>
       <!-- Appearance sits between the title and the account block, so the two
            halves of the bar stay balanced as the account label changes width. -->
-      <div class="appearance">
-        <select id="field-theme" title="Theme" aria-label="Theme">
-          <optgroup label="Colours">
-            <option value="midnight">Midnight</option>
-            <option value="slate">Slate</option>
-            <option value="nord">Nord</option>
-            <option value="ember">Ember</option>
-            <option value="daylight">Daylight</option>
-          </optgroup>
-          <!-- Skins change shape, type and chrome, not only colour. -->
-          <optgroup label="Skins">
-            <option value="win95">Windows 95</option>
-            <option value="xbox360">Xbox 360</option>
-          </optgroup>
-        </select>
-        <select id="field-layout" title="Layout" aria-label="Layout">
-          <option value="compact">Compact</option>
-          <option value="grid">Grid</option>
-          <option value="library">Library</option>
-        </select>
-      </div>
-
       <button id="btn-friends" type="button" class="secondary">Friends</button>
+      <button id="btn-settings" type="button" class="secondary" title="Settings">Settings</button>
 
       <div class="account">
-        <span id="account-name">Not signed in</span>
+        <!-- The whole chip is the switcher. Sign-out moved into that dialog so
+             the bar holds one control per account rather than three. -->
+        <button id="btn-account" type="button" class="account-chip" hidden>
+          <span id="account-avatar" class="avatar" aria-hidden="true"></span>
+          <span id="account-name">Not signed in</span>
+        </button>
+        <span id="account-label" class="account-label">Not signed in</span>
         <button id="btn-login" type="button">Sign in with Microsoft</button>
-        <button id="btn-logout" type="button" hidden>Sign out</button>
       </div>
     </header>
 
     <main>
       <section class="instances">
         <div class="section-head">
-          <h2>Instances</h2>
+          <h2>Instances <span id="instance-count" class="count"></span></h2>
           <button id="btn-new-instance" type="button" class="primary">New instance</button>
         </div>
         <ul id="instance-grid" class="instance-grid"></ul>
@@ -60,13 +44,19 @@
           <div id="hero-badges" class="badges"></div>
           <p id="hero-meta" class="instance-meta"></p>
           <div id="hero-actions" class="instance-actions"></div>
+          <!-- Everything the badges cannot say in two words. Fills the panel
+               that was otherwise dead space below the buttons. -->
+          <dl id="hero-details" class="hero-details"></dl>
         </div>
       </section>
 
       <section class="console">
         <div class="console-head">
           <h2>Runtime log</h2>
-          <button id="btn-open-root" type="button">Open game folder</button>
+          <div class="console-actions">
+            <button id="btn-clear-log" type="button">Clear</button>
+            <button id="btn-open-root" type="button">Open game folder</button>
+          </div>
         </div>
         <!-- No `hidden` attribute: visibility is driven by the .active class so
              the element never leaves layout. See styles.css. -->
@@ -87,8 +77,24 @@
         <label for="field-name">Name</label>
         <input id="field-name" name="name" type="text" maxlength="48" required />
 
-        <label for="field-icon">Icon</label>
+        <span class="field-label">Icon</span>
+        <div id="block-picker" class="block-picker"></div>
+        <label for="field-icon" class="sub-label">or type an emoji</label>
         <input id="field-icon" name="icon" type="text" maxlength="4" />
+
+        <!-- Only offered when editing: artwork is stored per instance id, and
+             a new instance has none until it is created. -->
+        <div id="artwork-block">
+          <span class="field-label">Artwork</span>
+          <div class="artwork-row">
+            <span id="artwork-preview" class="artwork-preview"></span>
+            <div class="artwork-buttons">
+              <button type="button" id="artwork-choose">Choose image…</button>
+              <button type="button" id="artwork-clear">Remove</button>
+            </div>
+          </div>
+          <p class="hint">Shown on the card and behind the instance in the library layout.</p>
+        </div>
 
         <div id="template-block">
           <!-- Fixed for the life of an instance: changing either invalidates
@@ -180,15 +186,69 @@
       </menu>
     </dialog>
 
+    <dialog id="accounts-dialog" class="dialog">
+      <div class="mods-head">
+        <h3>Accounts</h3>
+      </div>
+
+      <p id="accounts-error" class="dialog-error" hidden></p>
+
+      <ul id="accounts-list" class="account-list"></ul>
+
+      <menu class="dialog-actions">
+        <button type="button" id="accounts-add">Add account</button>
+        <button type="button" id="btn-logout" class="danger">Sign out</button>
+        <button type="button" id="accounts-close" class="primary">Done</button>
+      </menu>
+    </dialog>
+
+    <dialog id="settings-dialog" class="dialog">
+      <form method="dialog">
+        <h3>Settings</h3>
+
+        <label for="field-theme">Colour theme</label>
+        <select id="field-theme">
+          <option value="midnight">Midnight</option>
+          <option value="slate">Slate</option>
+          <option value="nord">Nord</option>
+          <option value="ember">Ember</option>
+          <option value="daylight">Daylight</option>
+        </select>
+
+        <label for="field-style">Style</label>
+        <select id="field-style">
+          <option value="none">Default — uses the colour theme</option>
+          <option value="win95">Windows 95</option>
+          <option value="xbox360">Xbox 360</option>
+          <option value="minecraft">Minecraft Launcher</option>
+        </select>
+        <p class="hint">Styles bring their own palette, so they override the colour theme.</p>
+
+        <label for="field-layout">Layout</label>
+        <select id="field-layout">
+          <option value="compact">Compact — list beside the log</option>
+          <option value="grid">Grid — tiles, log along the bottom</option>
+          <option value="library">Library — sidebar and a hero panel</option>
+        </select>
+
+        <label for="field-directory">Friends directory</label>
+        <input id="field-directory" type="text" placeholder="wss://your.directory/" autocomplete="off" />
+        <p class="hint">Leave blank to turn the friends panel off.</p>
+
+        <label for="field-cfkey">CurseForge API key</label>
+        <input id="field-cfkey" type="password" placeholder="Leave blank to use the bundled key" autocomplete="off" />
+        <p class="hint" id="cfkey-hint">Needed to browse CurseForge.</p>
+
+        <menu class="dialog-actions">
+          <button type="button" id="settings-close" class="primary">Done</button>
+        </menu>
+      </form>
+    </dialog>
+
     <dialog id="friends-dialog" class="dialog">
       <div class="mods-head">
         <h3>Friends</h3>
         <span id="friends-status" class="friends-status">offline</span>
-      </div>
-
-      <div id="friends-setup" class="cf-setup-row" hidden>
-        <input id="friends-url" type="text" placeholder="wss://your.directory/" autocomplete="off" />
-        <button type="button" id="friends-save" class="primary">Connect</button>
       </div>
 
       <div id="friends-add" class="cf-setup-row">
@@ -201,7 +261,6 @@
       <ul id="friends-list" class="mod-list"></ul>
 
       <menu class="dialog-actions">
-        <button type="button" id="friends-settings">Change directory</button>
         <button type="button" id="friends-close" class="primary">Done</button>
       </menu>
     </dialog>

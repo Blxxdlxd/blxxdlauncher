@@ -24,6 +24,7 @@ const SETTINGS_FILE = path.join(DIRS.launcherState, 'settings.json');
  */
 const DEFAULTS: LauncherSettings = {
   theme: 'midnight',
+  style: 'none',
   layout: 'compact',
   directoryUrl: DEFAULT_DIRECTORY_URL,
 };
@@ -33,10 +34,16 @@ const DEFAULTS: LauncherSettings = {
  * downgraded settings file cannot leave the UI referencing a `data-theme` that
  * has no rules — which renders as an unstyled page rather than an error.
  */
-export const THEMES = [
-  'midnight', 'slate', 'nord', 'ember', 'daylight',
-  'win95', 'xbox360',
-] as const;
+export const THEMES = ['midnight', 'slate', 'nord', 'ember', 'daylight'] as const;
+
+/**
+ * Every skin the stylesheet defines, applied as `data-style`.
+ *
+ * Separate from the palette: a skin decides the shape of the UI, a theme
+ * decides its colours. Skins that carry their own palette (all of them, so far)
+ * override the theme while active.
+ */
+export const STYLES = ['none', 'win95', 'xbox360', 'minecraft'] as const;
 
 /** Every layout the stylesheet defines. */
 export const LAYOUTS = ['compact', 'grid', 'library'] as const;
@@ -52,8 +59,15 @@ export function getSettings(): LauncherSettings {
     const raw = fs.readFileSync(SETTINGS_FILE, 'utf8').replace(/^﻿/, '');
     const parsed = JSON.parse(raw) as Partial<LauncherSettings>;
 
+    // Skins used to live in the theme field. Move one across rather than
+    // silently resetting a user who had picked Windows 95 back to midnight.
+    const legacySkin = (STYLES as readonly string[]).includes(parsed.theme as string)
+      ? (parsed.theme as LauncherSettings['style'])
+      : null;
+
     cached = {
       theme: isTheme(parsed.theme) ? parsed.theme : DEFAULTS.theme,
+      style: isStyle(parsed.style) ? parsed.style : (legacySkin ?? DEFAULTS.style),
       layout: isLayout(parsed.layout) ? parsed.layout : DEFAULTS.layout,
       directoryUrl:
         typeof parsed.directoryUrl === 'string' && parsed.directoryUrl.length > 0
@@ -81,6 +95,7 @@ export function updateSettings(patch: Partial<LauncherSettings>): LauncherSettin
   // renderer, where nothing should be mutating it in place.
   const next: LauncherSettings = {
     theme: isTheme(patch.theme) ? patch.theme : current.theme,
+    style: isStyle(patch.style) ? patch.style : current.style,
     layout: isLayout(patch.layout) ? patch.layout : current.layout,
     directoryUrl:
       typeof patch.directoryUrl === 'string' ? patch.directoryUrl.trim() : current.directoryUrl,
@@ -102,6 +117,10 @@ export function updateSettings(patch: Partial<LauncherSettings>): LauncherSettin
 
 function isTheme(value: unknown): value is LauncherSettings['theme'] {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
+}
+
+function isStyle(value: unknown): value is LauncherSettings['style'] {
+  return typeof value === 'string' && (STYLES as readonly string[]).includes(value);
 }
 
 function isLayout(value: unknown): value is LauncherSettings['layout'] {

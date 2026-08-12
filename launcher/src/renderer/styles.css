@@ -91,6 +91,13 @@
 
 * { box-sizing: border-box; }
 
+/*
+ * An author `display` beats the UA sheet's `[hidden] { display: none }`, so any
+ * flex or grid rule silently defeats the attribute — which is how the account
+ * chip stayed on screen while signed out, showing "Not signed in" twice.
+ */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font: var(--font-size)/1.5 var(--font-ui);
@@ -115,7 +122,73 @@ body {
 .topbar { gap: 16px; }
 .topbar h1 { margin-right: auto; }
 .account { display: flex; align-items: center; gap: 10px; }
-.account span { color: var(--muted); }
+.account-label { color: var(--muted); }
+
+/*
+ * Player head.
+ *
+ * The skin PNG is set as two background layers from script (hat over face) and
+ * cropped by background-position; see paintAvatar() in renderer.ts. `pixelated`
+ * is the whole point — a 8x8 face scaled up with smoothing is mush.
+ *
+ * The text fallback is an initial, shown when the account has a default skin or
+ * the lookup failed, so the chip never collapses to an empty square.
+ */
+.avatar {
+  background-color: var(--border);
+  background-repeat: no-repeat;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  display: grid;
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  height: 28px;
+  image-rendering: pixelated;
+  place-items: center;
+  width: 28px;
+}
+
+.avatar.large { font-size: 16px; height: 40px; width: 40px; }
+
+/* The chip is a button, but should read as an identity, not an action. */
+.account-chip {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  display: flex;
+  font-weight: 600;
+  gap: 9px;
+  padding: 4px 10px 4px 4px;
+}
+
+.account-chip:hover { background: var(--panel); border-color: var(--border); }
+
+.cf-setup-row { display: flex; align-items: center; gap: 8px; }
+.cf-setup-row input { flex: 1; min-width: 0; }
+
+.account-list { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
+
+.account-row {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.account-row.active { border-color: var(--accent); }
+
+.account-row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.account-row-body strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-row-state { color: var(--muted); font-size: 12px; }
+.account-row-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/* Switching runs the full Xbox Live chain, so it is seconds, not instant. */
+.dialog.busy { cursor: progress; }
 
 button {
   background: var(--accent);
@@ -132,7 +205,7 @@ button.secondary { background: transparent; border: 1px solid var(--border); col
 
 main {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: minmax(440px, 1.4fr) minmax(320px, 1fr);
   gap: 16px;
   padding: 16px 20px;
   flex: 1;
@@ -152,6 +225,20 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   margin-bottom: 10px;
 }
 .section-head h2 { margin: 0; }
+
+/* Count sits with the heading but reads as data, not part of the label. */
+.count { font-variant-numeric: tabular-nums; opacity: 0.65; }
+.count:not(:empty)::before { content: "("; }
+.count:not(:empty)::after { content: ")"; }
+
+.console-actions { display: flex; gap: 8px; }
+
+/* An empty log is a normal state on a fresh start; say so rather than showing
+   a void the size of the panel. */
+.log:empty::before {
+  content: "No output yet — press Play and the game's console appears here.";
+  color: var(--muted);
+}
 
 /* The list scrolls on its own so the console pane keeps its height however
    many instances exist. */
@@ -198,11 +285,100 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   place-items: center;
   font-size: 20px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--accent) 32%, transparent),
+      color-mix(in srgb, var(--accent) 10%, transparent)
+    );
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
 }
 
 .instance-body { grid-area: body; min-width: 0; }
+
+.block-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/*
+ * The swatch is the block picture and nothing else, so it carries no padding
+ * and no label — the accessible name comes from aria-label, since a background
+ * image is invisible to a screen reader.
+ */
+.block-swatch {
+  aspect-ratio: 1;
+  padding: 4px;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 78%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.block-swatch:hover { background-color: color-mix(in srgb, var(--accent) 14%, transparent); }
+.block-swatch.selected {
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent);
+}
+
+/* Smaller than the field labels above it — this one is an aside, not a heading. */
+.sub-label { font-size: 11px; color: var(--muted); }
+
+.artwork-row { display: flex; align-items: center; gap: 12px; }
+.artwork-buttons { display: flex; gap: 8px; }
+
+/* Square, matching the hero it previews rather than the 40px card tile. */
+.artwork-preview {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/*
+ * A tile showing a picture drops the accent tint it wears when it is only an
+ * emoji — that tint exists to give a glyph a background, and over a real image
+ * it is a coloured wash across the picture.
+ *
+ * These are longhands, and they are placed after every rule that paints one of
+ * these tiles. `background:` shorthand resets background-size to `auto`, so a
+ * `cover` declared earlier — or in a lower-specificity rule — is silently
+ * dropped and the image renders at its natural size. The image itself arrives
+ * as an inline style from paintArtwork(), which outranks all of this.
+ */
+.instance-icon.has-block,
+.hero-art.has-block,
+.artwork-preview.has-block,
+.instance-icon.has-art,
+.hero-art.has-art,
+.artwork-preview.has-art,
+:root[data-style="none"] .hero-art.has-art,
+:root[data-style="none"] .hero-art.has-block {
+  background-color: transparent;
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: color-mix(in srgb, #000 30%, transparent);
+}
+
+/* Blocks sit inside the tile with a little air; artwork bleeds to the edges. */
+.instance-icon.has-block,
+.hero-art.has-block,
+.artwork-preview.has-block {
+  background-size: 82%;
+  background-position: center;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .instance-body h3 {
   margin: 0 0 5px;
   font-size: 15px;
@@ -225,7 +401,34 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .badge.warn { background: transparent; border-color: #6b5a2a; color: #ffd166; }
 .badge.error { background: transparent; border-color: #6b2f2f; color: var(--danger); }
 
+/* Only the library layout hides badges, so only it needs the one-line summary. */
+.instance-sub { display: none; }
+:root[data-layout="library"] .instance-card .instance-sub {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .instance-meta { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+/*
+ * Two columns: a fixed label gutter and a value that takes the rest. `dl` gives
+ * this the right semantics for free, so the pairs stay associated when read out
+ * rather than being a grid of loose text.
+ */
+.hero-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 7px 16px;
+  margin: 20px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  max-width: 520px;
+}
+.hero-details dt { color: var(--muted); }
+.hero-details dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
 
 .instance-actions {
   grid-area: actions;
@@ -276,7 +479,8 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   margin: 10px 0 4px;
 }
 
-.dialog input[type="text"] {
+.dialog input[type="text"],
+.dialog input[type="password"] {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -285,7 +489,8 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   font: inherit;
   padding: 7px 10px;
 }
-.dialog input[type="text"]:focus { outline: none; border-color: var(--accent); }
+.dialog input[type="text"]:focus,
+.dialog input[type="password"]:focus { outline: none; border-color: var(--accent); }
 
 .dialog textarea {
   width: 100%;
@@ -662,6 +867,15 @@ progress.active { visibility: visible; }
 }
 :root[data-layout="library"] .instance-card:hover:not(.selected) { border-color: var(--muted); }
 
+#friends-dialog > *,
+#accounts-dialog > * { padding-left: 20px; padding-right: 20px; }
+#friends-dialog > .mods-head,
+#accounts-dialog > .mods-head { padding-top: 18px; }
+#friends-dialog > menu,
+#accounts-dialog > menu { padding-bottom: 14px; }
+
+#friends-list { height: auto; max-height: 320px; min-height: 64px; }
+
 .friends-status { font-size: 11px; color: var(--muted); }
 .friends-status.online { color: #6ee7a8; }
 .friends-status.connecting { color: #ffb454; }
@@ -703,7 +917,7 @@ progress.active { visibility: visible; }
  * the affordance before shadows existed. The bevel is four borders of two
  * colours, which is exactly how the original did it.
  */
-:root[data-theme="win95"] {
+:root[data-style="win95"] {
   --bg: #008080;              /* the teal desktop */
   --panel: #c0c0c0;
   --border: #808080;
@@ -722,51 +936,71 @@ progress.active { visibility: visible; }
 }
 
 /* Raised outer bevel: light top-left, dark bottom-right. */
-:root[data-theme="win95"] .instance-card,
-:root[data-theme="win95"] .dialog,
-:root[data-theme="win95"] .console,
-:root[data-theme="win95"] .hero {
+:root[data-style="win95"] .instance-card,
+:root[data-style="win95"] .dialog,
+:root[data-style="win95"] .console,
+:root[data-style="win95"] .hero {
   border: 2px solid;
   border-color: #ffffff #404040 #404040 #ffffff;
   background: #c0c0c0;
 }
 
-:root[data-theme="win95"] button {
+:root[data-style="win95"] button {
   border: 2px solid;
   border-color: #ffffff #404040 #404040 #ffffff;
   background: #c0c0c0;
   color: #000;
 }
 /* Pressed inverts the bevel, which is the whole visual language. */
-:root[data-theme="win95"] button:active:not(:disabled) {
+:root[data-style="win95"] button:active:not(:disabled) {
   border-color: #404040 #ffffff #ffffff #404040;
 }
-:root[data-theme="win95"] .instance-actions button,
-:root[data-theme="win95"] button.secondary {
+:root[data-style="win95"] .instance-actions button,
+:root[data-style="win95"] button.secondary {
   background: #c0c0c0;
   color: #000;
 }
 
 /* Inputs are sunken: the raised bevel reversed. */
-:root[data-theme="win95"] .dialog input[type="text"],
-:root[data-theme="win95"] .dialog select,
-:root[data-theme="win95"] .dialog textarea,
-:root[data-theme="win95"] .log {
+:root[data-style="win95"] .dialog input[type="text"],
+:root[data-style="win95"] .dialog input[type="password"],
+:root[data-style="win95"] .dialog select,
+:root[data-style="win95"] .dialog textarea,
+:root[data-style="win95"] .log {
   border: 2px solid;
   border-color: #404040 #ffffff #ffffff #404040;
   background: #ffffff;
   color: #000;
 }
 
-:root[data-theme="win95"] .topbar h1 { color: #ffffff; }
-:root[data-theme="win95"] .account span { color: #d0d0d0; }
-:root[data-theme="win95"] h2 { color: #000; }
+:root[data-style="win95"] .topbar h1 { color: #ffffff; }
+/* The bare label still sits on the navy bar; the chip is a raised button. */
+:root[data-style="win95"] .account-label { color: #d0d0d0; }
+:root[data-style="win95"] .account-chip,
+:root[data-style="win95"] .account-chip span { color: #000; }
+/*
+ * No bevel on the avatar. `box-sizing: border-box` is global, so a 2px border
+ * would shrink the paint box to 24px while paintAvatar() sizes the background
+ * for 28px — the crop would lose the right and bottom of the face.
+ */
+:root[data-style="win95"] h2 { color: #000; }
+
+/*
+ * List rows are white listbox entries here, not `--bg` — which in this skin is
+ * the teal desktop and reads as a hole punched through the dialog. The selected
+ * row takes the era's navy-on-white highlight.
+ */
+:root[data-style="win95"] .account-row,
+:root[data-style="win95"] .mod-row { background: #ffffff; }
+:root[data-style="win95"] .account-row.active { background: #000080; }
+:root[data-style="win95"] .account-row.active strong,
+:root[data-style="win95"] .account-row.active .account-row-state { color: #ffffff; }
 
 /* --- Xbox 360 --------------------------------------------------------------
  * The blade era: near-black charcoal, one bright green, generous rounding and a
  * soft glow on the primary action.
  */
-:root[data-theme="xbox360"] {
+:root[data-style="xbox360"] {
   --bg: #0f1310;
   --panel: #171d18;
   --border: #2b352c;
@@ -785,35 +1019,323 @@ progress.active { visibility: visible; }
   color-scheme: dark;
 }
 
-:root[data-theme="xbox360"] .instance-card,
-:root[data-theme="xbox360"] .console,
-:root[data-theme="xbox360"] .hero,
-:root[data-theme="xbox360"] .dialog {
+:root[data-style="xbox360"] .instance-card,
+:root[data-style="xbox360"] .console,
+:root[data-style="xbox360"] .hero,
+:root[data-style="xbox360"] .dialog {
   box-shadow: var(--panel-shadow);
   background: linear-gradient(180deg, #1b221c 0%, #141a15 100%);
 }
 
 /* The primary action glows; everything else stays quiet. That contrast is the
    whole look — a dashboard with one obvious thing to press. */
-:root[data-theme="xbox360"] button.primary,
-:root[data-theme="xbox360"] .instance-actions button.primary {
+:root[data-style="xbox360"] button.primary,
+:root[data-style="xbox360"] .instance-actions button.primary {
   background: linear-gradient(180deg, #6fd82a 0%, #4ea617 100%);
   box-shadow: var(--button-shadow);
   color: #0b1408;
   text-shadow: none;
 }
-:root[data-theme="xbox360"] button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+:root[data-style="xbox360"] button.primary:hover:not(:disabled) { filter: brightness(1.12); }
 
-:root[data-theme="xbox360"] .instance-icon,
-:root[data-theme="xbox360"] .hero-art {
+:root[data-style="xbox360"] .instance-icon,
+:root[data-style="xbox360"] .hero-art {
   box-shadow: inset 0 0 18px rgb(93 194 30 / 18%);
 }
 
-:root[data-theme="xbox360"] .topbar h1 {
+:root[data-style="xbox360"] .topbar h1 {
   color: var(--accent);
   text-shadow: 0 0 10px rgb(93 194 30 / 40%);
 }
 
+/* --- Minecraft Launcher ----------------------------------------------------
+ * The official launcher's chrome: flat dark grey panels, near-square corners,
+ * and one saturated green reserved entirely for the play action. No shadows or
+ * gradients — the look is deliberately plain so the green is the only thing
+ * that draws the eye.
+ */
+:root[data-style="minecraft"] {
+  --bg: #1e1f22;
+  --panel: #2b2d31;
+  --border: #3f4147;
+  --text: #ffffff;
+  --muted: #a8abb3;
+  --accent: #4c8c2b;          /* the PLAY green */
+  --danger: #a62c26;
+  --topbar-bg: #141517;
+
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+  --radius-pill: 3px;
+  --font-ui: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+  --button-weight: 600;
+  --panel-shadow: none;
+  color-scheme: dark;
+}
+
+/*
+ * PLAY. Uppercase, letter-spaced and square, with a darker lip along the
+ * bottom — the one piece of relief in an otherwise flat interface, and what
+ * makes the button read as the launcher's rather than a generic green one.
+ */
+:root[data-style="minecraft"] button.primary,
+:root[data-style="minecraft"] .instance-actions button.primary {
+  background: #4c8c2b;
+  border-bottom: 3px solid #3a6b20;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+:root[data-style="minecraft"] button.primary:hover:not(:disabled) { background: #5ba233; }
+:root[data-style="minecraft"] button.primary:active:not(:disabled) {
+  background: #3f7523;
+  /* Pressed loses the lip and takes the height back as padding, so the button
+     does not change size and shift everything beside it. */
+  border-bottom-width: 0;
+  padding-bottom: calc(7px + 3px);
+}
+
+/* Secondary actions are outlines, not fills — only PLAY is solid. */
+:root[data-style="minecraft"] button:not(.primary):not(.danger):not(.tab) {
+  background: #3a3c42;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+:root[data-style="minecraft"] button:not(.primary):not(.danger):not(.tab):hover:not(:disabled) {
+  background: #46484f;
+}
+
+/* The selected instance takes a green marker on its leading edge. */
+:root[data-style="minecraft"] .instance-card.selected {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+:root[data-style="minecraft"] .topbar h1 { color: #ffffff; letter-spacing: 0.08em; }
+
 /* --- shared: let skins drive panel shadow and button weight ---------------- */
 button { font-weight: var(--button-weight); }
 .dialog, .console, .hero, .instance-card { box-shadow: var(--panel-shadow); }
+
+/* ------------------------------------------------------------------ polish
+ *
+ * Applied to the flat themes only. The skins define their own chrome, and a
+ * shared shadow or gradient here would fight the Windows 95 bevels — so each
+ * rule is scoped away from them by :not().
+ */
+:root:not([data-style="win95"]) .topbar {
+  box-shadow: 0 1px 0 rgb(255 255 255 / 3%), 0 2px 12px rgb(0 0 0 / 25%);
+  position: relative;
+  z-index: 1;
+}
+
+/* Cards lift slightly on hover, which is the cheapest way to make a list feel
+   like it responds to the cursor at all. */
+:root:not([data-style="win95"]) .instance-card {
+  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+}
+:root:not([data-style="win95"]) .instance-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  transform: translateY(-1px);
+}
+
+:root:not([data-style="win95"]) button {
+  transition: filter 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+/* The accent stripe was a flat bar; a fade reads as a highlight rather than a
+   border and stops it competing with the card edge. */
+:root:not([data-style="win95"]) .instance-card::before {
+  background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 30%, transparent) 100%);
+}
+
+/* Section headings were the same weight as body text and read as clutter. */
+h2 { font-weight: 600; }
+
+/* Scrollbars: the default light-on-dark ones are the loudest thing on screen
+   once everything else is muted. */
+:root:not([data-style="win95"]) ::-webkit-scrollbar { width: 10px; height: 10px; }
+:root:not([data-style="win95"]) ::-webkit-scrollbar-track { background: transparent; }
+:root:not([data-style="win95"]) ::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--bg);
+}
+:root:not([data-style="win95"]) ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* The log is the one monospace surface; give it a little inset so it reads as
+   a well rather than a panel. */
+.log { background: color-mix(in srgb, var(--bg) 70%, #000); }
+
+/* Dialogs got taller than the viewport once settings gained fields. */
+.dialog { max-height: calc(100vh - 60px); overflow-y: auto; }
+
+/* Topbar buttons should be quieter than New Instance, which is the one action
+   worth drawing the eye. */
+.topbar button.secondary { font-weight: 500; }
+
+
+/* ============================================================================
+ * Default look
+ * ============================================================================
+ *
+ * Scoped to `[data-style="none"]`, so the three skins are untouched: they
+ * define their own chrome and any of this would fight it.
+ *
+ * Everything here is derived with color-mix() from the eight tokens a theme
+ * already declares. No palette gains a variable, and a new theme picks all of
+ * it up for free by declaring those eight — which is the only reason a change
+ * this broad is maintainable.
+ *
+ * Elevation mixes toward white rather than toward --text. Mixing toward the
+ * text colour inverts on the light theme, where a "raised" surface would come
+ * out darker than the panel under it and read as a hole.
+ */
+
+:root[data-style="none"] {
+  --raise-1: color-mix(in srgb, #fff 4%, var(--panel));
+  --raise-2: color-mix(in srgb, #fff 7%, var(--panel));
+  --hairline: color-mix(in srgb, #fff 8%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  --panel-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 6px 20px -8px rgb(0 0 0 / 30%);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 14%), 0 14px 32px -12px rgb(0 0 0 / 40%);
+  --shadow-modal: 0 24px 70px -18px rgb(0 0 0 / 65%);
+}
+
+/* Surfaces are a gradient plus a top hairline, which is what separates a panel
+   from a rectangle of flat colour under this kind of low-contrast palette. */
+:root[data-style="none"] .instance-card,
+:root[data-style="none"] .console,
+:root[data-style="none"] .hero,
+:root[data-style="none"] .dialog {
+  background: linear-gradient(180deg, var(--raise-1) 0%, var(--panel) 100%);
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: var(--panel-shadow), inset 0 1px 0 var(--hairline);
+}
+
+:root[data-style="none"] .topbar {
+  background: linear-gradient(180deg, var(--raise-2) 0%, var(--panel) 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 1px 0 var(--hairline) inset, 0 4px 20px -6px rgb(0 0 0 / 35%);
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+:root[data-style="none"] .topbar h1 {
+  background: linear-gradient(92deg, var(--text), color-mix(in srgb, var(--accent) 70%, var(--text)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: 0.1em;
+}
+
+/* --- cards ---------------------------------------------------------------- */
+
+:root[data-style="none"] .instance-card {
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+:root[data-style="none"] .instance-card:hover {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-lift), inset 0 1px 0 var(--hairline);
+  transform: translateY(-2px);
+}
+:root[data-style="none"] .instance-card.selected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent-line),
+    var(--shadow-lift),
+    inset 0 1px 0 var(--hairline);
+}
+
+:root[data-style="none"] .instance-icon {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent),
+    0 2px 8px -3px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* The hero art is the largest single surface, so it carries the accent rather
+   than repeating the flat panel colour at four times the size. */
+:root[data-style="none"] .hero-art {
+  background:
+    radial-gradient(120% 120% at 25% 15%, color-mix(in srgb, var(--accent) 42%, transparent) 0%, transparent 62%),
+    linear-gradient(160deg, var(--raise-2), var(--panel));
+  border: 1px solid var(--accent-line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+}
+
+/* --- controls ------------------------------------------------------------- */
+
+:root[data-style="none"] button {
+  transition: background 120ms ease, border-color 120ms ease, transform 90ms ease,
+    box-shadow 120ms ease;
+}
+
+:root[data-style="none"] button.primary,
+:root[data-style="none"] .instance-actions button.primary {
+  background: linear-gradient(180deg, color-mix(in srgb, #fff 14%, var(--accent)) 0%, var(--accent) 100%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 25%, transparent) inset,
+    0 4px 14px -6px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+:root[data-style="none"] button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+:root[data-style="none"] button:active:not(:disabled) { transform: translateY(1px); }
+
+/* Secondary actions sit on a surface rather than dissolving into the panel. */
+:root[data-style="none"] .instance-actions button:not(.primary):not(.danger),
+:root[data-style="none"] .console-actions button,
+:root[data-style="none"] .topbar button.secondary {
+  background: var(--raise-2);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  color: var(--text);
+}
+:root[data-style="none"] .instance-actions button:not(.primary):not(.danger):hover:not(:disabled),
+:root[data-style="none"] .console-actions button:hover:not(:disabled),
+:root[data-style="none"] .topbar button.secondary:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  background: color-mix(in srgb, var(--accent) 10%, var(--raise-2));
+}
+
+/* Keyboard users get a ring the mouse never shows. */
+:root[data-style="none"] button:focus-visible,
+:root[data-style="none"] select:focus-visible,
+:root[data-style="none"] input:focus-visible,
+:root[data-style="none"] textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:root[data-style="none"] .badge {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  padding: 1px 8px;
+}
+
+/* --- log and dialogs ------------------------------------------------------ */
+
+/* Sunken, against the raised panel around it. */
+:root[data-style="none"] .log {
+  background: color-mix(in srgb, var(--bg) 82%, #000);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: inset 0 2px 10px -4px rgb(0 0 0 / 55%);
+}
+
+:root[data-style="none"] .dialog {
+  box-shadow: var(--shadow-modal), inset 0 1px 0 var(--hairline);
+}
+:root[data-style="none"] .dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(3px);
+}
+
+/* Respect the OS setting: every transition above is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style="none"] * {
+    transition: none !important;
+    transform: none !important;
+  }
+}

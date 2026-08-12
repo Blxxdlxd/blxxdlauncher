@@ -16,7 +16,18 @@ import * as path from 'node:path';
 import { app, BrowserWindow, ipcMain, shell, session } from 'electron';
 
 import { ensureLayout, DIRS } from './paths';
-import { login, restoreSession, clearSession, getAccount, getCachedAccount } from './auth';
+import {
+  login,
+  restoreSession,
+  clearSession,
+  getAccount,
+  getCachedAccount,
+  listAccounts,
+  switchAccount,
+  removeAccount,
+} from './auth';
+import { getSkin } from './skins';
+import { chooseArtwork, clearArtwork, getArtwork } from './artwork';
 import { detectJavaInstallations, listTemplates } from './profiles';
 import { getSettings, updateSettings } from './settings';
 import {
@@ -48,6 +59,7 @@ import {
 import { launchProfile } from './launch';
 import { IPC } from '../shared/types';
 import type {
+  AccountListing,
   AccountSummary,
   DirectoryState,
   InstalledMod,
@@ -305,6 +317,32 @@ function registerIpcHandlers(): void {
     clearSession();
   });
 
+  ipcMain.handle(IPC.authList, async (): Promise<AccountListing> => listAccounts());
+
+  ipcMain.handle(IPC.authSwitch, async (_event, uuid: unknown): Promise<AccountSummary> =>
+    switchAccount(asId(uuid, IPC.authSwitch)),
+  );
+
+  ipcMain.handle(IPC.authRemove, async (_event, uuid: unknown): Promise<void> => {
+    removeAccount(asId(uuid, IPC.authRemove));
+  });
+
+  ipcMain.handle(IPC.authSkin, async (_event, uuid: unknown): Promise<string | null> =>
+    getSkin(asId(uuid, IPC.authSkin)),
+  );
+
+  ipcMain.handle(IPC.artworkGet, async (_event, id: unknown): Promise<string | null> =>
+    getArtwork(asId(id, IPC.artworkGet)),
+  );
+
+  ipcMain.handle(IPC.artworkChoose, async (_event, id: unknown): Promise<string | null> =>
+    chooseArtwork(asId(id, IPC.artworkChoose)),
+  );
+
+  ipcMain.handle(IPC.artworkClear, async (_event, id: unknown): Promise<void> => {
+    clearArtwork(asId(id, IPC.artworkClear));
+  });
+
   ipcMain.handle(IPC.profilesList, async () => listProfiles());
 
   ipcMain.handle(IPC.templatesList, async (): Promise<InstanceTemplate[]> => listTemplates());
@@ -362,7 +400,11 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC.instanceDelete, async (_event, id: unknown, deleteFiles: unknown) => {
-    deleteInstance(asId(id, 'instances:delete'), deleteFiles === true);
+    const instanceId = asId(id, 'instances:delete');
+    deleteInstance(instanceId, deleteFiles === true);
+    // Artwork lives in launcher state, not the instance directory, so deleting
+    // the instance would otherwise leave the image behind for ever.
+    clearArtwork(instanceId);
   });
 
   ipcMain.handle(IPC.instanceOpenFolder, async (_event, id: unknown): Promise<void> => {

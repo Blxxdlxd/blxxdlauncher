@@ -173,10 +173,15 @@ export interface LauncherSettings {
     | 'slate'
     | 'nord'
     | 'ember'
-    | 'daylight'
-    /** Skins: these reshape the UI, not just its palette. */
-    | 'win95'
-    | 'xbox360';
+    | 'daylight';
+  /**
+   * Skin, applied as `data-style`, independent of the colour theme.
+   *
+   * A skin reshapes the UI — corner radius, typeface, chrome — and defines its
+   * own palette, so it overrides the theme's colours while it is active.
+   * `none` leaves the theme in charge, which is the normal case.
+   */
+  readonly style: 'none' | 'win95' | 'xbox360' | 'minecraft';
   /** Arrangement of the main screen. Applied as `data-layout`. */
   readonly layout: 'compact' | 'grid' | 'library';
   /**
@@ -386,6 +391,13 @@ export interface AccountSummary {
   readonly xuid?: string;
 }
 
+/** Every stored account, and which of them holds the live session. */
+export interface AccountListing {
+  readonly accounts: readonly AccountSummary[];
+  /** Null when signed out; the others can still be switched to. */
+  readonly activeUuid: string | null;
+}
+
 /** Progress/telemetry frames pushed from main -> renderer over IPC. */
 export type LaunchEvent =
   | { kind: 'status'; message: string }
@@ -402,6 +414,10 @@ export const IPC = {
   /** Cached identity from disk, no network. Lets the UI paint before refresh. */
   authCached: 'auth:cached',
   authLogout: 'auth:logout',
+  authList: 'auth:list',
+  authSwitch: 'auth:switch',
+  authRemove: 'auth:remove',
+  authSkin: 'auth:skin',
   profilesList: 'profiles:list',
   templatesList: 'templates:list',
   versionsMinecraft: 'versions:minecraft',
@@ -420,6 +436,9 @@ export const IPC = {
   instanceDuplicate: 'instances:duplicate',
   instanceDelete: 'instances:delete',
   instanceOpenFolder: 'instances:open-folder',
+  artworkGet: 'artwork:get',
+  artworkChoose: 'artwork:choose',
+  artworkClear: 'artwork:clear',
   modsSearch: 'mods:search',
   modsVersions: 'mods:versions',
   modsInstall: 'mods:install',
@@ -445,6 +464,22 @@ export interface LauncherBridge {
   cachedAccount(): Promise<AccountSummary | null>;
   restoreSession(): Promise<AccountSummary | null>;
   logout(): Promise<void>;
+
+  /** Stored accounts for the switcher. Cached data; no network I/O. */
+  listAccounts(): Promise<AccountListing>;
+  /**
+   * Make a stored account live. Runs the full refresh chain, so it takes as
+   * long as a sign-in does; rejects with a readable message on failure and
+   * leaves the previous session intact.
+   */
+  switchAccount(uuid: string): Promise<AccountSummary>;
+  /** Forget an account's credentials. */
+  removeAccount(uuid: string): Promise<void>;
+  /**
+   * The player's skin PNG as a data URI, or null when they use a default skin
+   * or it could not be fetched. Cropped to the head in CSS.
+   */
+  accountSkin(uuid: string): Promise<string | null>;
   listProfiles(): Promise<ClientProfile[]>;
   listTemplates(): Promise<InstanceTemplate[]>;
   /** Every Minecraft version Mojang lists, newest first. */
@@ -478,6 +513,20 @@ export interface LauncherBridge {
   /** `deleteFiles` also removes the instance's worlds, mods and config. */
   deleteInstance(id: string, deleteFiles: boolean): Promise<void>;
   openInstanceFolder(id: string): Promise<void>;
+
+  /**
+   * This instance's artwork as a data URI, or null when it has none and should
+   * fall back to its icon.
+   */
+  instanceArtwork(id: string): Promise<string | null>;
+  /**
+   * Open a file picker and store the chosen image as this instance's artwork.
+   * Resolves to null when the user cancels, and rejects when the file is not a
+   * decodable image.
+   */
+  chooseInstanceArtwork(id: string): Promise<string | null>;
+  /** Drop the stored artwork, falling back to the icon. */
+  clearInstanceArtwork(id: string): Promise<void>;
 
   /** Search Modrinth, already filtered to this instance's version and loader. */
   /** `only` restricts to one host; null searches every configured one. */
