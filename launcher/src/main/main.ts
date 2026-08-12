@@ -18,6 +18,13 @@ import { app, BrowserWindow, ipcMain, shell, session } from 'electron';
 import { ensureLayout, DIRS } from './paths';
 import { login, restoreSession, clearSession, getAccount, getCachedAccount } from './auth';
 import { detectJavaInstallations, listTemplates } from './profiles';
+import { getSettings, updateSettings } from './settings';
+import {
+  connectDirectory,
+  directoryAction,
+  getDirectoryState,
+  onDirectoryChange,
+} from './directory';
 import { listAvailableLoaders, listLoaderBuilds, listMinecraftVersions } from './versions';
 import {
   createInstance,
@@ -42,6 +49,7 @@ import { launchProfile } from './launch';
 import { IPC } from '../shared/types';
 import type {
   AccountSummary,
+  DirectoryState,
   InstalledMod,
   InstanceDraft,
   InstancePatch,
@@ -49,6 +57,7 @@ import type {
   InstanceTemplate,
   JavaInstallation,
   LaunchEvent,
+  LauncherSettings,
   LoaderBuild,
   LoaderKind,
   McVersion,
@@ -233,6 +242,10 @@ function asDraft(value: unknown): InstanceDraft {
   if (typeof raw['minecraftVersion'] !== 'string' || raw['minecraftVersion'].length === 0) {
     throw new Error('instances:create requires a minecraftVersion');
   }
+  // Every optional field of InstanceDraft has to appear here. A field added to
+  // the type but not to this object is dropped at the boundary in silence: the
+  // dialog collects it, create succeeds, and the setting is simply gone. That
+  // has happened here before — keep this in step with the interface.
   return {
     name: asString(raw['name'], 'New Instance'),
     minecraftVersion: raw['minecraftVersion'],
@@ -241,6 +254,11 @@ function asDraft(value: unknown): InstanceDraft {
     memoryMax: asString(raw['memoryMax'], '8G'),
     memoryMin: asString(raw['memoryMin'], '4G'),
     icon: asString(raw['icon'], '⬦'),
+    javaPathOverride:
+      typeof raw['javaPathOverride'] === 'string' ? raw['javaPathOverride'] : null,
+    extraJvmArgs: Array.isArray(raw['extraJvmArgs'])
+      ? raw['extraJvmArgs'].filter((arg): arg is string => typeof arg === 'string')
+      : [],
   };
 }
 
@@ -253,10 +271,22 @@ function asPatch(value: unknown): InstancePatch {
 
   // Only copy keys that are actually present and of the right type: an absent
   // field must stay absent, since `updateInstance` treats undefined as
-  // "leave alone" and a stray null would clear a setting.
-  for (const key of ['name', 'memoryMax', 'memoryMin', 'icon'] as const) {
+  // "leave alone".
+  //
+  // This list is the real contract, not InstancePatch — a field added to the
+  // type but not added here is silently discarded at the boundary, and the UI
+  // appears to save while nothing changes. That has now happened twice, to
+  // javaPathOverride and loaderVersion, so keep them in step.
+  for (const key of ['name', 'memoryMax', 'memoryMin', 'icon', 'loaderVersion'] as const) {
     if (typeof raw[key] === 'string') patch[key] = raw[key];
   }
+
+  // Null is meaningful here and must survive: it is how the UI says "back to
+  // automatic". Undefined still means "leave alone".
+  if (typeof raw['javaPathOverride'] === 'string' || raw['javaPathOverride'] === null) {
+    patch['javaPathOverride'] = raw['javaPathOverride'];
+  }
+
   if (Array.isArray(raw['extraJvmArgs'])) {
     patch['extraJvmArgs'] = raw['extraJvmArgs'].filter((arg): arg is string => typeof arg === 'string');
   }
@@ -285,6 +315,23 @@ function registerIpcHandlers(): void {
   // when the dialog opens rather than kept warm — a JDK can be installed or
   // removed between openings, and a cached list would quietly be wrong.
   ipcMain.handle(IPC.javaList, async (): Promise<JavaInstallation[]> => detectJavaInstallations());
+
+  ipcMain.handle(IPC.directoryState, async (): Promise<DirectoryState> => {
+    // Connecting here rather than at startup: the panel is what needs it, and a
+    // user with no directory configured should never open a socket at all.
+    connectDirectory();
+    return getDirectoryState();
+  });
+
+  ipcMain.handle(IPC.directoryAction, async (_event, op: unknown, value: unknown): Promise<void> => {
+    directoryAction(String(op), String(value));
+  });
+
+  ipcMain.handle(IPC.settingsGet, async (): Promise<LauncherSettings> => getSettings());
+
+  ipcMain.handle(IPC.settingsSet, async (_event, patch: unknown): Promise<LauncherSettings> =>
+    updateSettings((patch ?? {}) as Partial<LauncherSettings>),
+  );
 
   ipcMain.handle(IPC.versionsLoaders, async (_event, mc: unknown): Promise<LoaderKind[]> => {
     return listAvailableLoaders(asId(mc, 'versions:loaders'));
@@ -398,6 +445,15 @@ app.whenReady().then(() => {
   installContentSecurityPolicy();
   registerIpcHandlers();
   createWindow();
+
+  // Forward directory state to the renderer. Registered once, after the window
+  // exists: the roster arrives on the server's schedule, not in reply to a
+  // request, so it has to be pushed.
+  onDirectoryChange((directoryState) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.directoryEvent, directoryState);
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

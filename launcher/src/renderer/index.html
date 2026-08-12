@@ -8,6 +8,32 @@
   <body>
     <header class="topbar">
       <h1>Blxxdlauncher</h1>
+      <!-- Appearance sits between the title and the account block, so the two
+           halves of the bar stay balanced as the account label changes width. -->
+      <div class="appearance">
+        <select id="field-theme" title="Theme" aria-label="Theme">
+          <optgroup label="Colours">
+            <option value="midnight">Midnight</option>
+            <option value="slate">Slate</option>
+            <option value="nord">Nord</option>
+            <option value="ember">Ember</option>
+            <option value="daylight">Daylight</option>
+          </optgroup>
+          <!-- Skins change shape, type and chrome, not only colour. -->
+          <optgroup label="Skins">
+            <option value="win95">Windows 95</option>
+            <option value="xbox360">Xbox 360</option>
+          </optgroup>
+        </select>
+        <select id="field-layout" title="Layout" aria-label="Layout">
+          <option value="compact">Compact</option>
+          <option value="grid">Grid</option>
+          <option value="library">Library</option>
+        </select>
+      </div>
+
+      <button id="btn-friends" type="button" class="secondary">Friends</button>
+
       <div class="account">
         <span id="account-name">Not signed in</span>
         <button id="btn-login" type="button">Sign in with Microsoft</button>
@@ -22,6 +48,19 @@
           <button id="btn-new-instance" type="button" class="primary">New instance</button>
         </div>
         <ul id="instance-grid" class="instance-grid"></ul>
+      </section>
+
+      <!-- Only the library layout shows this. Kept in the markup rather than
+           built on demand so switching layouts is purely a CSS change, and the
+           selection survives a switch. -->
+      <section id="hero" class="hero">
+        <div class="hero-art" id="hero-art"></div>
+        <div class="hero-body">
+          <h2 id="hero-name">Nothing selected</h2>
+          <div id="hero-badges" class="badges"></div>
+          <p id="hero-meta" class="instance-meta"></p>
+          <div id="hero-actions" class="instance-actions"></div>
+        </div>
       </section>
 
       <section class="console">
@@ -52,6 +91,9 @@
         <input id="field-icon" name="icon" type="text" maxlength="4" />
 
         <div id="template-block">
+          <!-- Fixed for the life of an instance: changing either invalidates
+               every mod in the folder. Hidden when editing. -->
+          <div id="runtime-block">
           <div class="version-row">
             <div>
               <label for="field-mc">Minecraft version</label>
@@ -65,6 +107,7 @@
 
           <span class="field-label">Loader</span>
           <div id="loader-choices" class="template-choices"></div>
+          </div>
 
           <div id="build-block">
             <label for="field-build">Loader build</label>
@@ -83,6 +126,14 @@
           </div>
         </div>
         <p class="hint">Digits followed by M or G, e.g. <code>8G</code> or <code>6144M</code>.</p>
+
+        <label for="field-jvm">Extra JVM arguments</label>
+        <textarea id="field-jvm" rows="2" spellcheck="false"
+                  placeholder="-XX:+UseG1GC&#10;-Dexample.flag=true"></textarea>
+        <p class="hint">
+          One per line, or paste a whole line of flags. Appended after the
+          loader's own, so yours win.
+        </p>
 
         <label for="field-java">Java</label>
         <select id="field-java"></select>
@@ -113,18 +164,6 @@
       <div id="mods-browse" hidden>
         <input id="mods-search" type="search" placeholder="Search mods…" autocomplete="off" />
 
-        <p id="cf-prompt" class="cf-prompt" hidden>
-          Searching <strong>Modrinth</strong> only.
-          <button type="button" id="cf-setup" class="linklike">Add a CurseForge key</button>
-          to search both.
-        </p>
-
-        <div id="cf-setup-row" class="cf-setup-row" hidden>
-          <input id="cf-key" type="password" placeholder="CurseForge API key" autocomplete="off" />
-          <button type="button" id="cf-save" class="primary">Save</button>
-          <button type="button" id="cf-clear">Remove</button>
-        </div>
-
         <ul id="mods-results" class="mod-list"></ul>
       </div>
 
@@ -138,6 +177,32 @@
       <menu class="dialog-actions">
         <button type="button" id="mods-folder">Open folder</button>
         <button type="button" id="mods-close" class="primary">Done</button>
+      </menu>
+    </dialog>
+
+    <dialog id="friends-dialog" class="dialog">
+      <div class="mods-head">
+        <h3>Friends</h3>
+        <span id="friends-status" class="friends-status">offline</span>
+      </div>
+
+      <div id="friends-setup" class="cf-setup-row" hidden>
+        <input id="friends-url" type="text" placeholder="wss://your.directory/" autocomplete="off" />
+        <button type="button" id="friends-save" class="primary">Connect</button>
+      </div>
+
+      <div id="friends-add" class="cf-setup-row">
+        <input id="friends-name" type="text" placeholder="Add by username" autocomplete="off" maxlength="16" />
+        <button type="button" id="friends-add-btn" class="primary">Add</button>
+      </div>
+
+      <p id="friends-error" class="dialog-error" hidden></p>
+
+      <ul id="friends-list" class="mod-list"></ul>
+
+      <menu class="dialog-actions">
+        <button type="button" id="friends-settings">Change directory</button>
+        <button type="button" id="friends-close" class="primary">Done</button>
       </menu>
     </dialog>
 

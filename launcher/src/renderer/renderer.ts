@@ -30,6 +30,9 @@ type ModHealth = import('../shared/types').ModHealth;
 type ModSource = import('../shared/types').ModSource;
 type LauncherBridge = import('../shared/types').LauncherBridge;
 type LaunchEvent = import('../shared/types').LaunchEvent;
+type LauncherSettings = import('../shared/types').LauncherSettings;
+type DirectoryState = import('../shared/types').DirectoryState;
+type PersonRef = import('../shared/types').PersonRef;
 
 // Global augmentation, not `declare global` — that form is only valid inside a
 // module, and this file is intentionally a script.
@@ -59,6 +62,7 @@ const dialogError = el<HTMLParagraphElement>('dialog-error');
 const templateBlock = el<HTMLDivElement>('template-block');
 const loaderChoices = el<HTMLDivElement>('loader-choices');
 const buildBlock = el<HTMLDivElement>('build-block');
+const runtimeBlock = el<HTMLDivElement>('runtime-block');
 const fieldMc = el<HTMLSelectElement>('field-mc');
 const fieldSnapshots = el<HTMLInputElement>('field-snapshots');
 const fieldBuild = el<HTMLSelectElement>('field-build');
@@ -67,6 +71,7 @@ const fieldIcon = el<HTMLInputElement>('field-icon');
 const fieldMemMax = el<HTMLInputElement>('field-mem-max');
 const fieldMemMin = el<HTMLInputElement>('field-mem-min');
 const fieldJava = el<HTMLSelectElement>('field-java');
+const fieldJvm = el<HTMLTextAreaElement>('field-jvm');
 const javaHint = el<HTMLParagraphElement>('java-hint');
 
 const confirmDialog = el<HTMLDialogElement>('confirm-dialog');
@@ -74,6 +79,24 @@ const confirmBody = el<HTMLParagraphElement>('confirm-body');
 const confirmDeleteFiles = el<HTMLInputElement>('confirm-delete-files');
 const confirmOk = el<HTMLButtonElement>('confirm-ok');
 const confirmCancel = el<HTMLButtonElement>('confirm-cancel');
+const heroArt = el<HTMLDivElement>('hero-art');
+const heroName = el<HTMLHeadingElement>('hero-name');
+const heroBadges = el<HTMLDivElement>('hero-badges');
+const heroMeta = el<HTMLParagraphElement>('hero-meta');
+const heroActions = el<HTMLDivElement>('hero-actions');
+
+const fieldTheme = el<HTMLSelectElement>('field-theme');
+const fieldLayout = el<HTMLSelectElement>('field-layout');
+
+const friendsDialog = el<HTMLDialogElement>('friends-dialog');
+const friendsStatus = el<HTMLSpanElement>('friends-status');
+const friendsList = el<HTMLUListElement>('friends-list');
+const friendsError = el<HTMLParagraphElement>('friends-error');
+const friendsSetup = el<HTMLDivElement>('friends-setup');
+const friendsUrl = el<HTMLInputElement>('friends-url');
+const friendsAdd = el<HTMLDivElement>('friends-add');
+const friendsName = el<HTMLInputElement>('friends-name');
+
 const progress = el<HTMLProgressElement>('progress');
 const log = el<HTMLPreElement>('log');
 
@@ -149,6 +172,14 @@ function setRestoring(cached: AccountSummary | null): void {
 let instances: InstanceSummary[] = [];
 let templates: InstanceTemplate[] = [];
 
+/**
+ * The instance the library layout is showing.
+ *
+ * Kept even while another layout is active, so switching to Library does not
+ * land on nothing, and switching away and back returns to where you were.
+ */
+let selectedId: string | null = null;
+
 /** Instances with a launch in flight, so Play cannot be double-fired. */
 const launching = new Set<string>();
 
@@ -222,6 +253,7 @@ function renderInstances(): void {
 
     const li = document.createElement('li');
     li.className = 'instance-card';
+    li.dataset['instance'] = instance.id;
     // Drives the accent stripe and icon tint, so loader families stay
     // distinguishable without reading the badges.
     li.style.setProperty('--accent', summary.accent);
@@ -279,8 +311,93 @@ function renderInstances(): void {
     );
 
     li.append(icon, body, actions);
+
+    if (instance.id === selectedId) li.classList.add('selected');
+
+    // Selecting is harmless in every layout — only Library shows the result —
+    // so there is no need to ask which one is active. Clicks on the card's own
+    // buttons are ignored; those already do something.
+    li.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('button')) return;
+      select(instance.id);
+    });
+
     instanceGrid.appendChild(li);
   }
+
+  // Default to the first instance so the hero is never empty on a fresh start,
+  // and recover if the selected one has since been deleted.
+  if (!instances.some((entry) => entry.instance.id === selectedId)) {
+    selectedId = instances[0]?.instance.id ?? null;
+    instanceGrid.querySelector('.instance-card')?.classList.add('selected');
+  }
+
+  renderHero();
+  refreshLaunchButtons();
+}
+
+function select(id: string): void {
+  if (selectedId === id) return;
+  selectedId = id;
+
+  // Toggle the class in place rather than re-rendering: a full render rebuilds
+  // every card and would drop the list's scroll position on each click.
+  instanceGrid.querySelectorAll<HTMLLIElement>('.instance-card').forEach((node) => {
+    node.classList.toggle('selected', node.dataset['instance'] === id);
+  });
+  renderHero();
+}
+
+/**
+ * Fill the hero panel from the selected instance.
+ *
+ * Builds its own buttons rather than moving the card's: the card's are hidden
+ * by CSS in this layout, and reparenting them would leave the other layouts
+ * with no buttons at all after a switch.
+ */
+function renderHero(): void {
+  const summary = instances.find((entry) => entry.instance.id === selectedId);
+
+  if (!summary) {
+    heroName.textContent = 'Nothing selected';
+    heroArt.textContent = '';
+    heroBadges.replaceChildren();
+    heroMeta.textContent = '';
+    heroActions.replaceChildren();
+    return;
+  }
+
+  const { instance } = summary;
+  const { runtime } = instance;
+
+  heroArt.style.setProperty('--accent', summary.accent);
+  heroArt.textContent = instance.icon;
+  heroName.textContent = instance.name;
+
+  heroBadges.replaceChildren(
+    badge(runtime.minecraftVersion),
+    runtime.loader === 'vanilla'
+      ? badge('vanilla', 'muted')
+      : badge(`${runtime.loader} ${shortBuild(runtime.loaderVersion, runtime.minecraftVersion)}`, 'muted'),
+    badge(`${instance.memoryMax} heap`, 'muted'),
+    summary.clientCoreJar !== null ? badge('client core') : badge('no client core', 'muted'),
+  );
+  if (!summary.installed) heroBadges.append(badge('not installed', 'warn'));
+  if (!summary.javaReady) heroBadges.append(badge(`needs Java ${runtime.javaMajor}`, 'error'));
+
+  heroMeta.textContent = `${formatPlayed(instance.lastPlayed)} · ${formatSize(summary.sizeBytes)}`;
+
+  const play = makeButton('Play', () => void startLaunch(instance.id), 'primary');
+  play.dataset['play'] = instance.id;
+
+  heroActions.replaceChildren(
+    play,
+    makeButton('Mods', () => openMods(summary)),
+    makeButton('Edit', () => openEditDialog(summary)),
+    makeButton('Folder', () => void window.launcher.openInstanceFolder(instance.id)),
+    makeButton('Copy', () => void runAction(() => window.launcher.duplicateInstance(instance.id))),
+    makeButton('Delete', () => openDeleteDialog(summary), 'danger'),
+  );
 
   refreshLaunchButtons();
 }
@@ -437,7 +554,12 @@ function renderLoaderChoices(): void {
 }
 
 async function refreshBuilds(): Promise<void> {
-  if (chosenLoader === 'vanilla') {
+  // Editing works on the instance's own runtime; the create controls are hidden
+  // and hold whatever the last create left behind.
+  const activeVersion = editing ? editing.instance.runtime.minecraftVersion : fieldMc.value;
+  const activeLoader = editing ? editing.instance.runtime.loader : chosenLoader;
+
+  if (activeLoader === 'vanilla') {
     buildBlock.hidden = true;
     fieldBuild.replaceChildren();
     return;
@@ -450,8 +572,8 @@ async function refreshBuilds(): Promise<void> {
   loading.textContent = 'Loading…';
   fieldBuild.appendChild(loading);
 
-  const version = fieldMc.value;
-  const loader = chosenLoader;
+  const version = activeVersion;
+  const loader = activeLoader;
 
   let builds: LoaderBuild[] = [];
   try {
@@ -460,8 +582,9 @@ async function refreshBuilds(): Promise<void> {
     append(`could not list ${loader} builds: ${(err as Error).message}`, 'err');
   }
 
-  // Discard a response that arrived after the user moved on.
-  if (fieldMc.value !== version || chosenLoader !== loader) return;
+  // Discard a response that arrived after the user moved on. Not applicable
+  // while editing, where neither control can change under us.
+  if (!editing && (fieldMc.value !== version || chosenLoader !== loader)) return;
 
   fieldBuild.replaceChildren();
   for (const build of builds) {
@@ -482,6 +605,21 @@ async function refreshBuilds(): Promise<void> {
     none.value = '';
     fieldBuild.appendChild(none);
   }
+
+  if (editing) {
+    const current = editing.instance.runtime.loaderVersion;
+
+    // A build since pulled from the maven still has to appear, or opening the
+    // dialog would silently select a different one and saving would move the
+    // instance without being asked.
+    if (current && !builds.some((build) => build.version === current)) {
+      const missing = document.createElement('option');
+      missing.value = current;
+      missing.textContent = `${current} (installed)`;
+      fieldBuild.insertBefore(missing, fieldBuild.firstChild);
+    }
+    fieldBuild.value = current;
+  }
 }
 
 async function openCreateDialog(): Promise<void> {
@@ -490,11 +628,13 @@ async function openCreateDialog(): Promise<void> {
   dialogTitle.textContent = 'New instance';
   dialogConfirm.textContent = 'Create';
   templateBlock.hidden = false;
+  runtimeBlock.hidden = false;
 
   fieldName.value = '';
   fieldIcon.value = '⬦';
   fieldMemMax.value = '8G';
   fieldMemMin.value = '4G';
+  fieldJvm.value = '';
   currentRequiredMajor = null;
   void renderJavaChoices(null, null);
   dialogError.hidden = true;
@@ -521,13 +661,19 @@ function openEditDialog(summary: InstanceSummary): void {
 
   dialogTitle.textContent = `Edit ${summary.instance.name}`;
   dialogConfirm.textContent = 'Save';
-  // Hidden, not disabled: the era is fixed for the life of an instance.
-  templateBlock.hidden = true;
+  // The Minecraft version and loader are fixed for the life of an instance —
+  // changing either invalidates every mod in the folder. The build is not: a
+  // newer NeoForge for the same Minecraft version is an ordinary thing to want,
+  // and nothing in the instance directory cares.
+  templateBlock.hidden = false;
+  runtimeBlock.hidden = true;
+  void refreshBuilds();
 
   fieldName.value = summary.instance.name;
   fieldIcon.value = summary.instance.icon;
   fieldMemMax.value = summary.instance.memoryMax;
   fieldMemMin.value = summary.instance.memoryMin;
+  fieldJvm.value = summary.instance.extraJvmArgs.join('\n');
   currentRequiredMajor = summary.instance.runtime.javaMajor;
   void renderJavaChoices(summary.instance.javaPathOverride, currentRequiredMajor);
   dialogError.hidden = true;
@@ -613,6 +759,22 @@ fieldJava.addEventListener('change', () => updateJavaHint(currentRequiredMajor))
 /** The Java major the instance in the dialog needs, for the hint above. */
 let currentRequiredMajor: number | null = null;
 
+/**
+ * Split a blob of JVM flags into arguments.
+ *
+ * Splits on whitespace that is followed by a dash, rather than on whitespace
+ * generally. That is what lets a flag carry a path with a space in it —
+ * `-Dfoo=C:\Program Files\x -Dbar=1` is two arguments, not four — while a
+ * pasted single line of flags still separates correctly. Newlines are
+ * whitespace, so one-per-line works without a special case.
+ */
+function parseJvmArgs(raw: string): string[] {
+  return raw
+    .split(/\s+(?=-)/)
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
 const MEMORY_PATTERN = /^\d+[MmGg]$/;
 
 function validateDialog(): string | null {
@@ -646,6 +808,8 @@ dialogForm.addEventListener('submit', (event) => {
   const memoryMax = fieldMemMax.value.trim().toUpperCase();
   const memoryMin = fieldMemMin.value.trim().toUpperCase();
   const javaPathOverride = fieldJava.value.length > 0 ? fieldJava.value : null;
+  const extraJvmArgs = parseJvmArgs(fieldJvm.value);
+  const loaderVersion = buildBlock.hidden ? undefined : fieldBuild.value;
   const target = editing;
 
   dialog.close();
@@ -663,6 +827,7 @@ dialogForm.addEventListener('submit', (event) => {
           memoryMin,
           icon,
           javaPathOverride,
+          extraJvmArgs,
         });
         await refreshInstances();
         // Straight into the mods panel: adding mods is nearly always the next
@@ -686,6 +851,8 @@ dialogForm.addEventListener('submit', (event) => {
       memoryMax,
       memoryMin,
       javaPathOverride,
+      extraJvmArgs,
+      loaderVersion,
     }),
   );
 });
@@ -819,6 +986,11 @@ async function renderModHealth(instanceId: string): Promise<void> {
   modsHealth.hidden = false;
 }
 
+/** The jar the launcher stages itself, named by the core build. */
+function isClientCore(fileName: string): boolean {
+  return /^blxxdlauncher-core(-dev)?-/.test(fileName);
+}
+
 async function refreshInstalledMods(): Promise<void> {
   if (!modsInstance) return;
   const id = modsInstance.instance.id;
@@ -856,9 +1028,18 @@ async function refreshInstalledMods(): Promise<void> {
     const meta = document.createElement('span');
     const bits = [formatSize(mod.sizeBytes)];
     if (mod.dependency) bits.push('dependency');
-    // Worth surfacing: the client core lives here too, and deleting it would
-    // quietly turn the instance into plain Minecraft.
-    if (mod.external) bits.push('not installed by the launcher');
+    // `external` means "no entry in the mods manifest", which covers two very
+    // different things: a jar the user dropped in, and the client core, which
+    // the launcher stages itself on every launch. Calling the core "not
+    // installed by the launcher" was flatly wrong — the launcher is what put it
+    // there — so the two cases are now named separately.
+    //
+    // Worth surfacing either way: removing the core quietly turns the instance
+    // into plain Minecraft, and removing a hand-added jar cannot be undone by
+    // the launcher because it has no idea where it came from.
+    if (mod.external) {
+      bits.push(mod.projectId === null && isClientCore(mod.fileName) ? 'client core' : 'added manually');
+    }
     if (!mod.enabled) bits.push('disabled');
     meta.textContent = bits.join(' · ');
 
@@ -906,10 +1087,10 @@ async function runSearch(query: string): Promise<void> {
 
     if (results.length > 0) {
       setModsStatus('');
-    } else if (modTab === 'curseforge' && !cfPrompt.hidden) {
-      // The prompt being visible means no key is configured, which is a very
-      // different problem from "nothing matched".
-      setModsStatus('Add a CurseForge API key to search CurseForge.');
+    } else if (modTab === 'curseforge' && !curseforgeReady) {
+      // No key is a very different problem from "nothing matched", and without
+      // saying so the tab just looks broken.
+      setModsStatus('No CurseForge API key — put one in ~/.blxxdlauncher/launcher/curseforge.key');
     } else {
       setModsStatus('No mods matched.');
     }
@@ -1000,55 +1181,29 @@ function formatDownloads(count: number): string {
 
 /* ------------------------------------------------- CurseForge key setup */
 
-const cfPrompt = el<HTMLParagraphElement>('cf-prompt');
-const cfSetupRow = el<HTMLDivElement>('cf-setup-row');
-const cfKeyField = el<HTMLInputElement>('cf-key');
 
 /**
- * Show the prompt only while CurseForge is unconfigured.
+ * Whether a CurseForge key is present, tracked only to explain an empty result
+ * list on the CurseForge tab.
  *
- * The key is never read back out of the main process — only whether one exists.
- * There is no reason for the renderer to hold a credential it cannot use.
+ * There is no UI for entering one. The key is a one-time setup step, and a
+ * panel that keeps offering it afterwards is noise — so it is configured by
+ * dropping the file in place:
+ *
+ *   ~/.blxxdlauncher/launcher/curseforge.key
+ *
+ * The renderer never sees the key itself, only whether the file exists. There
+ * is no reason for a browser context to hold a credential it cannot use.
  */
+let curseforgeReady = false;
+
 async function refreshCurseForgeState(): Promise<void> {
-  let configured = false;
   try {
-    configured = await window.launcher.curseforgeConfigured();
+    curseforgeReady = await window.launcher.curseforgeConfigured();
   } catch {
-    /* treated as unconfigured */
+    curseforgeReady = false;
   }
-  cfPrompt.hidden = configured;
-  if (configured) cfSetupRow.hidden = true;
 }
-
-el<HTMLButtonElement>('cf-setup').addEventListener('click', () => {
-  cfSetupRow.hidden = !cfSetupRow.hidden;
-  if (!cfSetupRow.hidden) cfKeyField.focus();
-});
-
-el<HTMLButtonElement>('cf-save').addEventListener('click', () => {
-  const key = cfKeyField.value.trim();
-  if (key.length === 0) return;
-  void (async () => {
-    await window.launcher.setCurseforgeKey(key);
-    // Cleared immediately: no reason to leave a credential sitting in a DOM
-    // node once it has been handed over.
-    cfKeyField.value = '';
-    await refreshCurseForgeState();
-    setModsStatus('CurseForge key saved.', 'ok');
-    await runSearch(modsSearchBox.value);
-  })();
-});
-
-el<HTMLButtonElement>('cf-clear').addEventListener('click', () => {
-  void (async () => {
-    await window.launcher.setCurseforgeKey(null);
-    cfKeyField.value = '';
-    await refreshCurseForgeState();
-    setModsStatus('CurseForge key removed.');
-    await runSearch(modsSearchBox.value);
-  })();
-});
 
 modsSearchBox.addEventListener('input', () => {
   window.clearTimeout(searchTimer);
@@ -1203,7 +1358,238 @@ window.launcher.onLaunchEvent(handleLaunchEvent);
  * an unhandled rejection here leaves a blank, uninformative window with no clue
  * in any log the user will think to look at.
  */
+/** Last state pushed by main. Re-rendered whenever the dialog is open. */
+let directory: DirectoryState | null = null;
+
+function renderFriends(): void {
+  if (!directory) return;
+
+  friendsStatus.textContent = directory.configured ? directory.status : 'no directory set';
+  friendsStatus.className = `friends-status ${directory.configured ? directory.status : ''}`;
+
+  friendsError.textContent = directory.error ?? '';
+  friendsError.hidden = directory.error === null;
+
+  // Nothing to add anyone to without a directory, so the row would only produce
+  // errors.
+  friendsAdd.hidden = !directory.configured;
+
+  friendsList.replaceChildren();
+
+  if (!directory.configured) {
+    friendsList.appendChild(note('Set a directory address to use friends.'));
+    return;
+  }
+
+  // Requests first: they are the only thing here needing an answer, and burying
+  // them under a long friends list is how they get missed.
+  if (directory.incoming.length > 0) {
+    friendsList.appendChild(section('Requests'));
+    for (const person of directory.incoming) {
+      friendsList.appendChild(
+        personRow(person, false, null, [
+          ['Accept', 'accept', 'primary'],
+          ['Decline', 'decline', undefined],
+          ['Block', 'block', 'danger'],
+        ]),
+      );
+    }
+  }
+
+  friendsList.appendChild(section('Friends'));
+
+  if (directory.friends.length === 0) {
+    friendsList.appendChild(
+      note(directory.status === 'online' ? 'No friends yet.' : 'Not connected.'),
+    );
+  } else {
+    // Online first, then alphabetical. The list exists to answer "who can I
+    // play with", and that order answers it without needing to be read.
+    const sorted = [...directory.friends].sort(
+      (a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username),
+    );
+
+    for (const friend of sorted) {
+      // Hosting is reported, not offered as a button: joining needs a running
+      // game, which the launcher does not have.
+      const detail = friend.address ? `hosting - ${friend.address}` : null;
+      friendsList.appendChild(
+        personRow(friend, friend.online, detail, [
+          ['Remove', 'remove', undefined],
+          ['Block', 'block', 'danger'],
+        ]),
+      );
+    }
+  }
+
+  if (directory.outgoing.length > 0) {
+    friendsList.appendChild(section('Sent'));
+    for (const person of directory.outgoing) {
+      friendsList.appendChild(personRow(person, false, null, [['Cancel', 'cancel', undefined]]));
+    }
+  }
+
+  if (directory.blocked.length > 0) {
+    friendsList.appendChild(section('Blocked'));
+    for (const person of directory.blocked) {
+      friendsList.appendChild(personRow(person, false, null, [['Unblock', 'unblock', undefined]]));
+    }
+  }
+}
+
+function section(label: string): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'friends-section';
+  li.textContent = label;
+  return li;
+}
+
+function note(text: string): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'mod-empty';
+  li.textContent = text;
+  return li;
+}
+
+function personRow(
+  person: PersonRef,
+  online: boolean,
+  detail: string | null,
+  actions: ReadonlyArray<[string, string, 'primary' | 'danger' | undefined]>,
+): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'mod-row';
+
+  const left = document.createElement('div');
+  left.className = 'friend-row';
+
+  const dot = document.createElement('span');
+  dot.className = online ? 'friend-dot online' : 'friend-dot';
+
+  const body = document.createElement('div');
+  const name = document.createElement('strong');
+  name.textContent = person.username;
+
+  const sub = document.createElement('div');
+  sub.className = 'friend-sub';
+  sub.textContent = detail ?? (online ? 'online' : 'offline');
+
+  body.append(name, sub);
+  left.append(dot, body);
+
+  const buttons = document.createElement('div');
+  buttons.className = 'mod-actions';
+  for (const [label, op, style] of actions) {
+    buttons.appendChild(
+      makeButton(label, () => void window.launcher.directoryAction(op, person.uuid), style),
+    );
+  }
+
+  li.append(left, buttons);
+  return li;
+}
+
+el<HTMLButtonElement>('btn-friends').addEventListener('click', () => {
+  void (async () => {
+    try {
+      // Asking for the state is also what tells main to connect, so a user with
+      // no directory configured never opens a socket at all.
+      directory = await window.launcher.getDirectoryState();
+      friendsUrl.value = (await window.launcher.getSettings()).directoryUrl;
+      friendsSetup.hidden = directory.configured;
+      renderFriends();
+      friendsDialog.showModal();
+    } catch (err) {
+      append(`could not open friends: ${(err as Error).message}`, 'err');
+    }
+  })();
+});
+
+el<HTMLButtonElement>('friends-close').addEventListener('click', () => friendsDialog.close());
+
+el<HTMLButtonElement>('friends-settings').addEventListener('click', () => {
+  friendsSetup.hidden = !friendsSetup.hidden;
+  if (!friendsSetup.hidden) friendsUrl.focus();
+});
+
+el<HTMLButtonElement>('friends-save').addEventListener('click', () => {
+  void (async () => {
+    await window.launcher.setSettings({ directoryUrl: friendsUrl.value.trim() });
+    directory = await window.launcher.getDirectoryState();
+    friendsSetup.hidden = directory.configured;
+    renderFriends();
+  })();
+});
+
+function submitAdd(): void {
+  const name = friendsName.value.trim();
+  if (name.length === 0) return;
+  void window.launcher.directoryAction('add', name);
+  friendsName.value = '';
+}
+
+el<HTMLButtonElement>('friends-add-btn').addEventListener('click', submitAdd);
+friendsName.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') submitAdd();
+});
+
+// Pushed, not polled: presence changes on the server's schedule, not ours.
+window.launcher.onDirectory((next) => {
+  directory = next;
+  if (friendsDialog.open) renderFriends();
+});
+
+/**
+ * Put the appearance on the document.
+ *
+ * Attributes on the root element rather than classes on body, so the CSS can
+ * key off `:root[data-theme=...]` and win against the default block without
+ * needing !important anywhere.
+ */
+function applyAppearance(settings: LauncherSettings): void {
+  const root = document.documentElement;
+  root.dataset['theme'] = settings.theme;
+  root.dataset['layout'] = settings.layout;
+
+  fieldTheme.value = settings.theme;
+  fieldLayout.value = settings.layout;
+}
+
+/**
+ * Apply immediately, persist in the background.
+ *
+ * Waiting for the write before repainting would put a disk round trip between
+ * the click and the colour change on a control whose entire job is to be
+ * instant. A failed write is logged; the appearance still changes, it just
+ * will not survive a restart.
+ */
+function changeAppearance(patch: Partial<LauncherSettings>): void {
+  const root = document.documentElement;
+  if (patch.theme) root.dataset['theme'] = patch.theme;
+  if (patch.layout) root.dataset['layout'] = patch.layout;
+
+  void window.launcher.setSettings(patch).catch((err: Error) => {
+    append(`could not save appearance: ${err.message}`, 'err');
+  });
+}
+
+fieldTheme.addEventListener('change', () => {
+  changeAppearance({ theme: fieldTheme.value as LauncherSettings['theme'] });
+});
+
+fieldLayout.addEventListener('change', () => {
+  changeAppearance({ layout: fieldLayout.value as LauncherSettings['layout'] });
+});
+
 void (async () => {
+  try {
+    // Appearance first, and awaited: everything after this renders, and doing
+    // it later means a visible flash of the default theme on every start.
+    applyAppearance(await window.launcher.getSettings());
+  } catch (err) {
+    append(`could not load appearance: ${(err as Error).message}`, 'err');
+  }
+
   try {
     // Templates first: the create dialog cannot be opened without them, and
     // they never change for the life of the process.

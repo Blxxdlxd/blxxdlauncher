@@ -165,6 +165,57 @@ export interface InstalledMod {
   readonly source: ModSource | null;
 }
 
+/** Appearance preferences. Presentation only — nothing here affects a launch. */
+export interface LauncherSettings {
+  /** Colour scheme. Applied as `data-theme` on the document root. */
+  readonly theme:
+    | 'midnight'
+    | 'slate'
+    | 'nord'
+    | 'ember'
+    | 'daylight'
+    /** Skins: these reshape the UI, not just its palette. */
+    | 'win95'
+    | 'xbox360';
+  /** Arrangement of the main screen. Applied as `data-layout`. */
+  readonly layout: 'compact' | 'grid' | 'library';
+  /**
+   * Friends directory to connect to, e.g. `wss://example.com/`.
+   *
+   * Empty disables the friends panel entirely rather than leaving it failing to
+   * connect — most people running this will not have a directory at all.
+   */
+  readonly directoryUrl: string;
+}
+
+/** Someone on the roster who needs no live state. */
+export interface PersonRef {
+  readonly uuid: string;
+  readonly username: string;
+}
+
+/** A friend, plus whether they are online and reachable. */
+export interface FriendEntry extends PersonRef {
+  readonly online: boolean;
+  /** Present only while they are hosting a world. */
+  readonly address?: string;
+}
+
+/** Everything the friends panel needs, pushed whenever any of it changes. */
+export interface DirectoryState {
+  /** False when no directory URL is set — the panel explains rather than fails. */
+  readonly configured: boolean;
+  readonly status: 'offline' | 'connecting' | 'online';
+  /** Our own verified name, once the handshake completes. */
+  readonly username: string | null;
+  readonly friends: readonly FriendEntry[];
+  readonly incoming: readonly PersonRef[];
+  readonly outgoing: readonly PersonRef[];
+  readonly blocked: readonly PersonRef[];
+  /** Last problem worth showing, or null. */
+  readonly error: string | null;
+}
+
 /** Memory allocation, expressed the way MCLC wants it. */
 export interface MemorySpec {
   readonly max: string;
@@ -281,6 +332,8 @@ export interface InstanceDraft {
   readonly icon: string;
   /** Null (or absent) means resolve automatically. */
   readonly javaPathOverride?: string | null;
+  /** Appended after the loader's own flags, so a user flag wins a conflict. */
+  readonly extraJvmArgs?: string[];
 }
 
 /** Fields an existing instance allows editing. */
@@ -291,6 +344,15 @@ export interface InstancePatch {
   readonly icon?: string;
   readonly extraJvmArgs?: string[];
   readonly javaPathOverride?: string | null;
+  /**
+   * A different build of the same loader.
+   *
+   * <p>Only the build moves. The Minecraft version and the loader family stay
+   * fixed for the life of an instance, because changing those invalidates every
+   * mod in the folder and the worlds may not open on the other side. Moving
+   * NeoForge 21.1.209 to 21.1.248 changes none of that.
+   */
+  readonly loaderVersion?: string;
 }
 
 /**
@@ -344,6 +406,11 @@ export const IPC = {
   templatesList: 'templates:list',
   versionsMinecraft: 'versions:minecraft',
   javaList: 'java:list',
+  directoryState: 'directory:state',
+  directoryAction: 'directory:action',
+  directoryEvent: 'directory:event',
+  settingsGet: 'settings:get',
+  settingsSet: 'settings:set',
   modsCheck: 'mods:check',
   versionsLoaders: 'versions:loaders',
   versionsBuilds: 'versions:builds',
@@ -385,6 +452,18 @@ export interface LauncherBridge {
 
   /** Every JVM found on this machine, for the per-instance Java picker. */
   listJavaInstallations(): Promise<JavaInstallation[]>;
+
+  /** Appearance preferences, applied on startup. */
+  /** Current roster and connection state. */
+  getDirectoryState(): Promise<DirectoryState>;
+  /** add | accept | decline | cancel | remove | block | unblock */
+  directoryAction(op: string, value: string): Promise<void>;
+  /** Push subscription; returns an unsubscribe. */
+  onDirectory(listener: (state: DirectoryState) => void): () => void;
+
+  getSettings(): Promise<LauncherSettings>;
+  /** Merge a partial change; returns the settings as they now stand. */
+  setSettings(patch: Partial<LauncherSettings>): Promise<LauncherSettings>;
 
   /** Cross-check an instance's mods folder for missing files and dependencies. */
   checkMods(instanceId: string): Promise<ModHealth>;

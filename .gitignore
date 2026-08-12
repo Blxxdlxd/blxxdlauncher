@@ -31,3 +31,9 @@ curseforge.key
 # Instance registry: user data, and it records absolute paths from whichever
 # machine wrote it.
 instances.json
+
+# --- generated at build time ---------------------------------------------------
+# gen-edition.js writes this before tsc runs. It carries whatever directory URL
+# the build was made with, so it is never committed.
+launcher/src/main/edition.ts
+launcher/scripts/dist-dev.js

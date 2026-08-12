@@ -12,6 +12,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AccountSummary,
   ClientProfile,
+  DirectoryState,
   InstalledMod,
   InstanceDraft,
   InstancePatch,
@@ -20,6 +21,7 @@ import type {
   JavaInstallation,
   LaunchEvent,
   LauncherBridge,
+  LauncherSettings,
   LoaderBuild,
   LoaderKind,
   McVersion,
@@ -53,6 +55,11 @@ const IPC = {
   templatesList: 'templates:list',
   versionsMinecraft: 'versions:minecraft',
   javaList: 'java:list',
+  directoryState: 'directory:state',
+  directoryAction: 'directory:action',
+  directoryEvent: 'directory:event',
+  settingsGet: 'settings:get',
+  settingsSet: 'settings:set',
   modsCheck: 'mods:check',
   versionsLoaders: 'versions:loaders',
   versionsBuilds: 'versions:builds',
@@ -92,6 +99,22 @@ const bridge: LauncherBridge = {
   listMinecraftVersions: () => ipcRenderer.invoke(IPC.versionsMinecraft) as Promise<McVersion[]>,
 
   listJavaInstallations: () => ipcRenderer.invoke(IPC.javaList) as Promise<JavaInstallation[]>,
+
+  getDirectoryState: () => ipcRenderer.invoke(IPC.directoryState) as Promise<DirectoryState>,
+
+  directoryAction: (op: string, value: string) =>
+    ipcRenderer.invoke(IPC.directoryAction, op, value) as Promise<void>,
+
+  onDirectory: (callback: (state: DirectoryState) => void) => {
+    const listener = (_event: unknown, state: DirectoryState): void => callback(state);
+    ipcRenderer.on(IPC.directoryEvent, listener);
+    return () => ipcRenderer.removeListener(IPC.directoryEvent, listener);
+  },
+
+  getSettings: () => ipcRenderer.invoke(IPC.settingsGet) as Promise<LauncherSettings>,
+
+  setSettings: (patch: Partial<LauncherSettings>) =>
+    ipcRenderer.invoke(IPC.settingsSet, patch) as Promise<LauncherSettings>,
 
   checkMods: (instanceId: string) =>
     ipcRenderer.invoke(IPC.modsCheck, instanceId) as Promise<ModHealth>,

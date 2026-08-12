@@ -338,7 +338,7 @@ export async function createInstance(draft: InstanceDraft): Promise<InstanceSumm
     runtime,
     memoryMax: normaliseMemory(draft.memoryMax, DEFAULT_MEMORY_MAX),
     memoryMin: normaliseMemory(draft.memoryMin, DEFAULT_MEMORY_MIN),
-    extraJvmArgs: [],
+    extraJvmArgs: (draft.extraJvmArgs ?? []).filter((arg) => arg.trim().length > 0),
     icon: draft.icon.trim().slice(0, 4) || '⬦',
     javaPathOverride: draft.javaPathOverride?.trim() || null,
     createdAt: Date.now(),
@@ -372,6 +372,29 @@ export function updateInstance(id: string, patch: InstancePatch): InstanceSummar
   if (patch.javaPathOverride !== undefined) {
     // Empty string and null both mean "back to automatic".
     instance.javaPathOverride = patch.javaPathOverride?.trim() || null;
+  }
+
+  const nextBuild = patch.loaderVersion?.trim();
+  if (nextBuild && nextBuild !== instance.runtime.loaderVersion) {
+    const { minecraftVersion, loader } = instance.runtime;
+
+    // versionId and installerUrl are both derived from the build, so changing
+    // one without the others would leave the instance pointing at the old
+    // version directory while claiming the new build — it would launch, on the
+    // wrong loader, with no error.
+    const runtime: RuntimeSpec = {
+      ...instance.runtime,
+      loaderVersion: nextBuild,
+      versionId: versionIdFor(minecraftVersion, loader, nextBuild),
+      installerUrl: installerUrlFor(minecraftVersion, loader, nextBuild),
+    };
+
+    // `runtime` is readonly to stop casual reassignment elsewhere; this is the
+    // one place allowed to replace it, and only the build differs. The game
+    // directory, worlds, mods and config are untouched — the new loader is
+    // installed under versions/ on the next launch.
+    (instance as { runtime: RuntimeSpec }).runtime = runtime;
+    console.log(`[instances] ${instance.name}: loader build -> ${nextBuild}`);
   }
 
   persist();

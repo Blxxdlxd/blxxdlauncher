@@ -11,19 +11,23 @@
     "clean": "rimraf dist",
     "build:main": "tsc -p tsconfig.json",
     "copy:renderer": "copyfiles -u 2 \"src/renderer/**/*.html\" \"src/renderer/**/*.css\" dist/renderer",
-    "build": "npm run build:main && npm run copy:renderer",
+    "build": "npm run edition && npm run build:main && npm run copy:renderer",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron . --dev",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "edition": "node scripts/gen-edition.js",
+    "dist:dev": "node scripts/dist-dev.js"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
     "minecraft-launcher-core": "^3.18.2",
-    "msmc": "^4.1.0"
+    "msmc": "^4.1.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
     "copyfiles": "^2.4.1",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",

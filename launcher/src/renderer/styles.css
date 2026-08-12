@@ -1,4 +1,35 @@
+/* ---------------------------------------------------------------- themes
+ *
+ * Every colour in this stylesheet comes from these variables, so a theme is
+ * only ever an override block — no component knows which theme is active.
+ *
+ * `color-scheme` is set per theme, not globally: it tells the browser how to
+ * paint scrollbars, form controls and the native <dialog> backdrop, and a dark
+ * value on a light theme gives dark scrollbars on a white page.
+ *
+ * The default block is midnight, so a document with no data-theme (the moment
+ * before the renderer applies the saved one) is already correct rather than
+ * unstyled.
+ */
+/* Shape and type, shared by every theme unless a skin overrides them. Kept
+   separate from colour so a palette change never has to restate them. */
 :root {
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --font-ui: "Segoe UI", system-ui, sans-serif;
+  --font-size: 14px;
+  --border-width: 1px;
+  --panel-shadow: none;
+  --button-shadow: none;
+  --button-weight: 600;
+  --topbar-bg: var(--panel);
+}
+
+:root,
+:root[data-theme="midnight"] {
   --bg: #11131a;
   --panel: #181b25;
   --border: #272b38;
@@ -9,11 +40,60 @@
   color-scheme: dark;
 }
 
+/* Warmer and a shade lighter; less contrast between panel and background. */
+:root[data-theme="slate"] {
+  --bg: #1b1d22;
+  --panel: #24272e;
+  --border: #343842;
+  --text: #e8e8ea;
+  --muted: #969aa4;
+  --accent: #7aa2f7;
+  --danger: #f7768e;
+  color-scheme: dark;
+}
+
+/* Cool blue-grey, low contrast, easy for long sessions. */
+:root[data-theme="nord"] {
+  --bg: #2e3440;
+  --panel: #3b4252;
+  --border: #4c566a;
+  --text: #eceff4;
+  --muted: #a6adbb;
+  --accent: #88c0d0;
+  --danger: #bf616a;
+  color-scheme: dark;
+}
+
+/* Near-black with a warm accent. The highest contrast of the dark set. */
+:root[data-theme="ember"] {
+  --bg: #14100e;
+  --panel: #1e1916;
+  --border: #332a25;
+  --text: #f2e9e4;
+  --muted: #a1897c;
+  --accent: #ff9f45;
+  --danger: #e5484d;
+  color-scheme: dark;
+}
+
+/* The one light theme. Borders carry the structure that shadow does in the
+   dark themes, so they are deliberately stronger than a straight inversion. */
+:root[data-theme="daylight"] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --border: #d6d9e0;
+  --text: #1b1d22;
+  --muted: #5f6673;
+  --accent: #2f6fed;
+  --danger: #d1343b;
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  font: var(--font-size)/1.5 var(--font-ui);
   background: var(--bg);
   color: var(--text);
   height: 100vh;
@@ -31,13 +111,16 @@ body {
 }
 
 .topbar h1 { font-size: 16px; margin: 0; letter-spacing: 0.06em; text-transform: uppercase; }
+/* Three children now, so space them rather than pushing to the edges. */
+.topbar { gap: 16px; }
+.topbar h1 { margin-right: auto; }
 .account { display: flex; align-items: center; gap: 10px; }
 .account span { color: var(--muted); }
 
 button {
   background: var(--accent);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
   font: inherit;
@@ -88,7 +171,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 12px 14px 12px 16px;
   display: grid;
   grid-template-columns: auto 1fr;
@@ -114,7 +197,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   display: grid;
   place-items: center;
   font-size: 20px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
@@ -133,7 +216,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   font-size: 11px;
   line-height: 1.6;
   padding: 0 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--text);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
@@ -165,7 +248,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 
 .instance-empty {
   border: 1px dashed var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 28px 14px;
   text-align: center;
   color: var(--muted);
@@ -177,7 +260,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 0;
   width: min(440px, calc(100vw - 40px));
 }
@@ -197,18 +280,32 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   font: inherit;
   padding: 7px 10px;
 }
 .dialog input[type="text"]:focus { outline: none; border-color: var(--accent); }
 
+.dialog textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 7px 10px;
+  resize: vertical;
+}
+.dialog textarea:focus { outline: none; border-color: var(--accent); }
+
 .dialog select {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   font: inherit;
   padding: 7px 10px;
@@ -225,7 +322,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 
 .memory-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hint { margin: 6px 0 0; font-size: 11px; color: var(--muted); }
-.hint code { background: var(--bg); padding: 1px 4px; border-radius: 3px; }
+.hint code { background: var(--bg); padding: 1px 4px; border-radius: var(--radius-xs); }
 /* A chosen JVM that is missing, or older than the version needs. Amber rather
    than red: the instance still opens and still saves — this is a warning about
    what will happen at launch, not a validation failure blocking the dialog. */
@@ -242,7 +339,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   text-align: left;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 9px 12px;
   color: var(--text);
   font-weight: 400;
@@ -290,7 +387,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   font: inherit;
   margin-bottom: 10px;
@@ -317,12 +414,12 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   gap: 10px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
 }
 .mod-row.disabled { opacity: 0.5; }
 
-.mod-icon { width: 34px; height: 34px; border-radius: 6px; flex: none; object-fit: cover; }
+.mod-icon { width: 34px; height: 34px; border-radius: var(--radius-sm); flex: none; object-fit: cover; }
 
 .mod-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .mod-body strong { font-size: 13px; }
@@ -349,7 +446,7 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 
 .mod-empty {
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 24px 12px;
   text-align: center;
   color: var(--muted);
@@ -400,7 +497,7 @@ progress.active { visibility: visible; }
   overflow: auto;
   background: #0c0e14;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 12px;
   font: 12px/1.55 Consolas, monospace;
   white-space: pre-wrap;
@@ -408,39 +505,6 @@ progress.active { visibility: visible; }
 }
 .log .err { color: var(--danger); }
 .log .ok { color: #6ee7a8; }
-
-.cf-prompt { margin: 0 0 8px; font-size: 11px; color: var(--muted); }
-.cf-prompt strong { color: var(--text); font-weight: 600; }
-
-.linklike {
-  background: none;
-  border: none;
-  border-radius: 0;
-  color: var(--accent);
-  font: inherit;
-  font-size: 11px;
-  padding: 0;
-  text-decoration: underline;
-}
-
-.cf-setup-row { display: flex; gap: 6px; margin-bottom: 8px; }
-.cf-setup-row input {
-  flex: 1;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  padding: 6px 9px;
-}
-.cf-setup-row input:focus { outline: none; border-color: var(--accent); }
-.cf-setup-row button { font-size: 12px; padding: 6px 12px; }
-.cf-setup-row button:not(.primary) {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-}
 
 /* Mod folder health: shown only when something is actually wrong, so its mere
    presence is the signal. Amber, not red — the instance may still launch, and
@@ -450,7 +514,7 @@ progress.active { visibility: visible; }
   padding: 10px 12px;
   border: 1px solid #4a3a1c;
   border-left: 3px solid #ffb454;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #241d10;
   font-size: 12px;
   color: var(--text);
@@ -459,3 +523,297 @@ progress.active { visibility: visible; }
 .mods-health ul { margin: 0; padding-left: 16px; }
 .mods-health li { margin: 2px 0; color: var(--muted); }
 .mods-health code { color: var(--text); }
+
+/* ---------------------------------------------------------------- layouts
+ *
+ * Layouts change the arrangement, not the components. Both modes use the same
+ * markup and the same cards; only the grid differs, which is what keeps a
+ * second layout from doubling the maintenance.
+ *
+ * compact (default) — a fixed instance column beside a tall log.
+ * grid              — instances fill the width as tiles, log along the bottom.
+ */
+
+/* Instance cards lay out as a row in grid mode: icon, body, then actions on
+   the right rather than wrapped underneath. */
+:root[data-layout="grid"] main {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr auto;
+}
+
+:root[data-layout="grid"] .instance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+
+/* The log stops being a full-height column and becomes a strip. Tall enough to
+   read a stack trace, short enough not to dominate. */
+:root[data-layout="grid"] .console {
+  min-height: 0;
+  max-height: 30vh;
+}
+
+:root[data-layout="grid"] .log {
+  max-height: 22vh;
+}
+
+/* --------------------------------------------------------- appearance menu */
+
+.appearance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.appearance select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.appearance select:hover { color: var(--text); border-color: var(--accent); }
+.appearance select:focus { outline: none; border-color: var(--accent); }
+
+/* ---------------------------------------------------------------- library
+ *
+ * A selected-instance layout: a narrow list on the left, a hero panel for the
+ * one you are looking at, and the log beneath it.
+ *
+ * The hero lives in the markup for every layout but is only ever displayed by
+ * this one. Building it on demand would mean the selection was lost each time
+ * you switched layouts, and switching would stop being a pure CSS change.
+ */
+.hero { display: none; }
+
+:root[data-layout="library"] main {
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    "list hero"
+    "list console";
+}
+:root[data-layout="library"] .instances { grid-area: list; }
+:root[data-layout="library"] .console { grid-area: console; max-height: 28vh; }
+:root[data-layout="library"] .log { max-height: 20vh; }
+
+:root[data-layout="library"] .hero {
+  grid-area: hero;
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 20px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  min-height: 0;
+}
+
+/* Stands in for cover art until instances have any. A large glyph on an accent
+   wash reads as deliberate; a small emoji floating in a panel does not. */
+.hero-art {
+  --accent: #5b8cff;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  font-size: 64px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.hero-body { min-width: 0; }
+.hero-body h2 {
+  font-size: 22px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+  margin: 0 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hero-body .instance-meta { margin: 10px 0 0; }
+.hero-body .instance-actions { margin-top: 14px; }
+/* The hero's Play is the primary action of the whole screen. */
+.hero-body .instance-actions button.primary { padding: 9px 22px; font-size: 13px; }
+
+/* In this layout the cards are a picker, so they lose their own buttons and
+   gain a selected state. Everything actionable lives in the hero. */
+:root[data-layout="library"] .instance-card {
+  grid-template-areas: "icon body";
+  cursor: pointer;
+  padding: 10px 12px 10px 14px;
+}
+:root[data-layout="library"] .instance-actions { display: none; }
+:root[data-layout="library"] .hero .instance-actions { display: flex; }
+:root[data-layout="library"] .instance-card .badges { display: none; }
+:root[data-layout="library"] .instance-card .instance-meta { display: none; }
+:root[data-layout="library"] .instance-card .instance-icon { width: 30px; height: 30px; font-size: 15px; }
+
+:root[data-layout="library"] .instance-card.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+:root[data-layout="library"] .instance-card:hover:not(.selected) { border-color: var(--muted); }
+
+.friends-status { font-size: 11px; color: var(--muted); }
+.friends-status.online { color: #6ee7a8; }
+.friends-status.connecting { color: #ffb454; }
+
+/* Presence dot: the whole point of the panel is answering "who is on", so it
+   reads before the name does. */
+.friend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+  flex: none;
+}
+.friend-dot.online { background: #6ee7a8; }
+
+.friend-row { display: flex; align-items: center; gap: 10px; }
+.friend-sub { font-size: 11px; color: var(--muted); }
+.friends-section {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ skins
+ *
+ * A skin changes the shape of the UI, not only its colours: corner radius,
+ * typeface, border treatment and button weight are all tokens, so these blocks
+ * can restate them without touching a single component rule.
+ *
+ * Everything below is a reinterpretation, not an asset copy — the proportions
+ * and colours are chosen by eye to evoke the original, with no borrowed
+ * artwork, fonts or trademarks.
+ */
+
+/* --- Windows 95 ------------------------------------------------------------
+ * Square everything, system grey, and the raised/sunken bevels that carried all
+ * the affordance before shadows existed. The bevel is four borders of two
+ * colours, which is exactly how the original did it.
+ */
+:root[data-theme="win95"] {
+  --bg: #008080;              /* the teal desktop */
+  --panel: #c0c0c0;
+  --border: #808080;
+  --text: #000000;
+  --muted: #404040;
+  --accent: #000080;          /* title-bar navy */
+  --danger: #800000;
+  --topbar-bg: #000080;
+
+  --radius-xs: 0; --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-pill: 0;
+  --font-ui: Tahoma, "MS Sans Serif", Verdana, sans-serif;
+  --font-size: 12px;
+  --border-width: 2px;
+  --button-weight: 400;
+  color-scheme: light;
+}
+
+/* Raised outer bevel: light top-left, dark bottom-right. */
+:root[data-theme="win95"] .instance-card,
+:root[data-theme="win95"] .dialog,
+:root[data-theme="win95"] .console,
+:root[data-theme="win95"] .hero {
+  border: 2px solid;
+  border-color: #ffffff #404040 #404040 #ffffff;
+  background: #c0c0c0;
+}
+
+:root[data-theme="win95"] button {
+  border: 2px solid;
+  border-color: #ffffff #404040 #404040 #ffffff;
+  background: #c0c0c0;
+  color: #000;
+}
+/* Pressed inverts the bevel, which is the whole visual language. */
+:root[data-theme="win95"] button:active:not(:disabled) {
+  border-color: #404040 #ffffff #ffffff #404040;
+}
+:root[data-theme="win95"] .instance-actions button,
+:root[data-theme="win95"] button.secondary {
+  background: #c0c0c0;
+  color: #000;
+}
+
+/* Inputs are sunken: the raised bevel reversed. */
+:root[data-theme="win95"] .dialog input[type="text"],
+:root[data-theme="win95"] .dialog select,
+:root[data-theme="win95"] .dialog textarea,
+:root[data-theme="win95"] .log {
+  border: 2px solid;
+  border-color: #404040 #ffffff #ffffff #404040;
+  background: #ffffff;
+  color: #000;
+}
+
+:root[data-theme="win95"] .topbar h1 { color: #ffffff; }
+:root[data-theme="win95"] .account span { color: #d0d0d0; }
+:root[data-theme="win95"] h2 { color: #000; }
+
+/* --- Xbox 360 --------------------------------------------------------------
+ * The blade era: near-black charcoal, one bright green, generous rounding and a
+ * soft glow on the primary action.
+ */
+:root[data-theme="xbox360"] {
+  --bg: #0f1310;
+  --panel: #171d18;
+  --border: #2b352c;
+  --text: #eaf3ea;
+  --muted: #8fa392;
+  --accent: #5dc21e;          /* the green */
+  --danger: #e04141;
+  --topbar-bg: linear-gradient(180deg, #1d241d 0%, #131813 100%);
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --font-ui: "Segoe UI", Corbel, system-ui, sans-serif;
+  --panel-shadow: 0 2px 10px rgb(0 0 0 / 45%);
+  --button-shadow: 0 0 12px rgb(93 194 30 / 35%);
+  color-scheme: dark;
+}
+
+:root[data-theme="xbox360"] .instance-card,
+:root[data-theme="xbox360"] .console,
+:root[data-theme="xbox360"] .hero,
+:root[data-theme="xbox360"] .dialog {
+  box-shadow: var(--panel-shadow);
+  background: linear-gradient(180deg, #1b221c 0%, #141a15 100%);
+}
+
+/* The primary action glows; everything else stays quiet. That contrast is the
+   whole look — a dashboard with one obvious thing to press. */
+:root[data-theme="xbox360"] button.primary,
+:root[data-theme="xbox360"] .instance-actions button.primary {
+  background: linear-gradient(180deg, #6fd82a 0%, #4ea617 100%);
+  box-shadow: var(--button-shadow);
+  color: #0b1408;
+  text-shadow: none;
+}
+:root[data-theme="xbox360"] button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+
+:root[data-theme="xbox360"] .instance-icon,
+:root[data-theme="xbox360"] .hero-art {
+  box-shadow: inset 0 0 18px rgb(93 194 30 / 18%);
+}
+
+:root[data-theme="xbox360"] .topbar h1 {
+  color: var(--accent);
+  text-shadow: 0 0 10px rgb(93 194 30 / 40%);
+}
+
+/* --- shared: let skins drive panel shadow and button weight ---------------- */
+button { font-weight: var(--button-weight); }
+.dialog, .console, .hero, .instance-card { box-shadow: var(--panel-shadow); }

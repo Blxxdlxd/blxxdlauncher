@@ -334,10 +334,30 @@ const TEMPLATES: readonly InstanceTemplate[] = [MODERN, LEGACY];
 export function clientCoreFor(minecraftVersion: string, loader: LoaderKind): string | null {
   for (const template of TEMPLATES) {
     if (template.minecraftVersion === minecraftVersion && template.loader === loader) {
-      return template.clientCoreJar;
+      return preferDevEdition(template.clientCoreJar);
     }
   }
   return null;
+}
+
+/**
+ * Use the Dev core jar when one has been built, otherwise the release jar.
+ *
+ * The client core ships in two editions from one source tree: `-dev-` carries
+ * every module, the plain name carries the set intended for other people. Only
+ * one is normally present, so preferring dev is really "use whichever exists"
+ * — with a defined answer when both do.
+ *
+ * Resolved per call rather than once at load, so rebuilding the other edition
+ * takes effect without restarting the launcher. It is two `existsSync` calls
+ * against a path we were about to stat anyway.
+ */
+function preferDevEdition(releaseJar: string): string {
+  const dev = releaseJar.replace(/-core-(?=\d)/, '-core-dev-');
+  if (dev !== releaseJar && fs.existsSync(dev)) {
+    return dev;
+  }
+  return releaseJar;
 }
 
 /** Per-loader JVM flags. Era-appropriate GC tuning, plus loader bootstrapping. */
